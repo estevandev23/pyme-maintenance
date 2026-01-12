@@ -44,6 +44,9 @@ npx prisma studio
 
 # Reset de base de datos (CUIDADO: borra todos los datos)
 npx prisma migrate reset
+
+# Poblar base de datos con datos de prueba
+node scripts/seed-data.js
 ```
 
 ### Git
@@ -83,44 +86,55 @@ pyme-maintenance/
 ├── docs/                           # Documentación del proyecto
 │   ├── resumen-ejecutivo.md
 │   ├── diagrama-db.md
-│   └── guia-desarrollo.md
+│   ├── guia-desarrollo.md
+│   └── archivos-temporales.md
 ├── prisma/
-│   └── schema.prisma              # Schema de base de datos
+│   ├── schema.prisma              # Schema de base de datos
+│   └── migrations/                # Migraciones de DB
+├── scripts/
+│   └── seed-data.js               # Script para poblar base de datos
 ├── public/                        # Archivos estáticos
 ├── src/
 │   ├── app/                       # Next.js App Router
-│   │   ├── (auth)/               # Rutas de autenticación
-│   │   │   ├── login/
-│   │   │   └── register/
-│   │   ├── (dashboard)/          # Rutas protegidas
-│   │   │   ├── dashboard/
-│   │   │   ├── equipos/
-│   │   │   ├── mantenimientos/
-│   │   │   └── reportes/
-│   │   ├── api/                  # API Routes
-│   │   │   ├── auth/
-│   │   │   ├── equipos/
-│   │   │   ├── mantenimientos/
-│   │   │   └── reportes/
+│   │   ├── (dashboard)/           # Rutas protegidas (layout con sidebar)
+│   │   │   ├── page.tsx           # Dashboard principal
+│   │   │   ├── empresas/          # ✅ CRUD Empresas
+│   │   │   ├── equipos/           # ✅ CRUD Equipos
+│   │   │   ├── usuarios/          # ✅ CRUD Usuarios
+│   │   │   ├── mantenimientos/    # ✅ CRUD Mantenimientos
+│   │   │   ├── alertas/           # ✅ Sistema de Alertas
+│   │   │   └── reportes/          # 🚧 Pendiente
+│   │   ├── api/                   # API Routes
+│   │   │   ├── auth/              # NextAuth endpoints
+│   │   │   ├── empresas/          # API Empresas
+│   │   │   ├── equipos/           # API Equipos
+│   │   │   ├── usuarios/          # API Usuarios
+│   │   │   ├── mantenimientos/    # API Mantenimientos
+│   │   │   ├── alertas/           # API Alertas
+│   │   │   └── dashboard/         # API Dashboard stats
+│   │   ├── login/                 # ✅ Página de login
 │   │   ├── layout.tsx
-│   │   └── page.tsx
-│   ├── components/               # Componentes React
-│   │   ├── ui/                   # Componentes shadcn/ui
-│   │   ├── forms/
-│   │   ├── tables/
-│   │   └── dashboard/
-│   ├── lib/                      # Utilidades y configs
-│   │   ├── prisma.ts            # Cliente Prisma
-│   │   ├── auth.ts              # Configuración NextAuth
-│   │   ├── validations.ts       # Schemas Zod
-│   │   └── utils.ts
-│   └── types/                    # TypeScript types
-│       └── index.ts
-├── .env                          # Variables de entorno (NO subir a Git)
+│   │   └── globals.css
+│   ├── components/                # Componentes React
+│   │   ├── ui/                    # shadcn/ui (button, card, dialog, etc.)
+│   │   └── dashboard/             # Componentes del dashboard
+│   │       ├── sidebar.tsx        # Barra lateral con navegación
+│   │       └── header.tsx         # Encabezado con sesión
+│   ├── lib/                       # Utilidades y configs
+│   │   ├── prisma.ts              # Cliente Prisma singleton
+│   │   ├── auth.ts                # Configuración NextAuth
+│   │   └── utils.ts               # Utilidades (cn, formatters)
+│   ├── types/                     # TypeScript types
+│   │   └── next-auth.d.ts         # Extensión de tipos NextAuth
+│   └── middleware.ts              # Middleware de protección de rutas
+├── .env                           # Variables de entorno (NO subir a Git)
 ├── .gitignore
 ├── package.json
 ├── tsconfig.json
-└── next.config.ts
+├── next.config.ts
+├── tailwind.config.ts
+├── components.json                # Config shadcn/ui
+└── postcss.config.mjs
 ```
 
 ## Convenciones de Código
@@ -330,6 +344,127 @@ taskkill /PID <PID> /F
 npm run dev -- -p 3001
 ```
 
+## Patrones Importantes del Proyecto
+
+### 1. Control de Acceso Basado en Roles (RBAC)
+
+Todas las APIs filtran datos según el rol del usuario:
+
+```typescript
+// Ejemplo en API de alertas
+const session = await getServerSession(authOptions)
+const userRole = session.user.role
+const empresaId = session.user.empresaId
+
+if (userRole === "CLIENTE" && empresaId) {
+  // Cliente solo ve alertas de su empresa
+  mantenimientosWhere = { equipo: { empresaId } }
+} else if (userRole === "TECNICO") {
+  // Técnico solo ve sus mantenimientos asignados
+  mantenimientosWhere = { tecnicoId: userId }
+}
+// Admin ve todo (sin filtro)
+```
+
+### 2. Registro Automático en Historial
+
+Cada operación importante crea automáticamente una entrada en el historial usando transacciones:
+
+```typescript
+// Crear mantenimiento y registrar en historial atómicamente
+const result = await prisma.$transaction(async (tx) => {
+  const mantenimiento = await tx.mantenimiento.create({ data: { ... } })
+
+  await tx.historial.create({
+    data: {
+      equipoId: mantenimiento.equipoId,
+      mantenimientoId: mantenimiento.id,
+      tecnicoId: mantenimiento.tecnicoId,
+      observaciones: `Mantenimiento programado para ${fecha}`
+    }
+  })
+
+  return mantenimiento
+})
+```
+
+### 3. Patrón Upsert para Datos de Prueba
+
+El script de seeding usa upsert para ser idempotente:
+
+```typescript
+const empresa = await prisma.empresa.upsert({
+  where: { nit: '900123456-1' },
+  update: {},  // No actualiza si existe
+  create: {    // Solo crea si no existe
+    nombre: 'TechSolutions S.A.S',
+    nit: '900123456-1',
+    // ...
+  }
+})
+```
+
+### 4. Validación en Dos Capas
+
+- **Frontend**: React Hook Form + Zod para validación instantánea
+- **Backend**: Zod en API routes para seguridad
+
+```typescript
+// Schema compartido
+const equipoSchema = z.object({
+  tipo: z.string().min(1, "Tipo es requerido"),
+  serial: z.string().min(1, "Serial es requerido"),
+})
+
+// Frontend
+const form = useForm({
+  resolver: zodResolver(equipoSchema)
+})
+
+// Backend
+const validated = equipoSchema.parse(await request.json())
+```
+
+### 5. Auto-Refresh de Datos
+
+Componentes importantes actualizan datos automáticamente:
+
+```typescript
+useEffect(() => {
+  fetchAlertasCount()
+  const interval = setInterval(fetchAlertasCount, 30000) // 30s
+  return () => clearInterval(interval)
+}, [])
+```
+
+### 6. Estados del Sidebar Sincronizados
+
+El sidebar mantiene el estado activo sincronizado con la ruta actual:
+
+```typescript
+const pathname = usePathname()
+const isActive = pathname === item.href
+```
+
+## Credenciales de Prueba
+
+Después de ejecutar el seed script (`node scripts/seed-data.js`):
+
+**Administrador:**
+- Email: admin@mantenpro.com
+- Password: password123
+
+**Técnicos:**
+- tecnico1@mantenpro.com / password123
+- tecnico2@mantenpro.com / password123
+- tecnico3@mantenpro.com / password123
+
+**Clientes:**
+- cliente1@techsolutions.com / password123
+- cliente2@innovatech.com / password123
+- cliente3@datacenter.co / password123
+- cliente4@sistemasintegrados.com / password123
+
 ## Recursos
 
 - [Next.js Docs](https://nextjs.org/docs)
@@ -338,3 +473,4 @@ npm run dev -- -p 3001
 - [shadcn/ui](https://ui.shadcn.com/)
 - [Zod](https://zod.dev/)
 - [NextAuth.js](https://next-auth.js.org/)
+- [date-fns](https://date-fns.org/)

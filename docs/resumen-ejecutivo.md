@@ -98,17 +98,109 @@ Planificar, registrar, controlar y hacer seguimiento a los mantenimientos realiz
 8. **Dashboard** muestra métricas actualizadas
 9. **Administrador** genera reportes para auditoría
 
-## Próximos Pasos de Desarrollo
+## Estado Actual del Desarrollo
 
-1. Configurar NextAuth para autenticación
-2. Instalar shadcn/ui para componentes UI
-3. Crear layout principal y navegación
-4. Implementar módulo de autenticación (login/registro)
-5. Desarrollar CRUD de empresas
-6. Desarrollar CRUD de equipos
-7. Desarrollar CRUD de mantenimientos
-8. Implementar dashboard con métricas
-9. Desarrollar sistema de alertas
-10. Implementar exportación de reportes
-11. Pruebas unitarias e integración
-12. Documentación técnica
+### ✅ Completado
+
+1. **Configuración Inicial**
+   - NextAuth configurado para autenticación
+   - shadcn/ui instalado y configurado
+   - Layout principal y navegación (Sidebar + Header)
+   - PostgreSQL en Docker (contenedor `pyme-db`)
+   - Prisma ORM configurado con schema completo
+
+2. **Módulo de Autenticación**
+   - Login con email y contraseña
+   - Sesiones JWT con NextAuth
+   - Middleware de protección de rutas
+   - Control de acceso basado en roles (RBAC)
+
+3. **CRUD de Empresas**
+   - Listado con búsqueda y filtros
+   - Creación de empresas (Admin solamente)
+   - Edición de datos de empresa
+   - Eliminación con confirmación
+   - Validación con Zod
+
+4. **CRUD de Equipos**
+   - Listado con filtros por estado y empresa
+   - Registro de equipos (tipo, marca, modelo, serial)
+   - Edición de equipos
+   - Gestión de estados (Activo, Inactivo, En Mantenimiento, Dado de Baja)
+   - Validación de seriales únicos
+   - Vista filtrada por rol (Cliente ve solo sus equipos)
+
+5. **CRUD de Usuarios**
+   - Listado de usuarios con roles
+   - Creación de usuarios (Admin/Técnico/Cliente)
+   - Asignación de empresas a clientes
+   - Activar/Desactivar usuarios
+   - Hash de contraseñas con bcrypt
+   - Validación de emails únicos
+
+6. **CRUD de Mantenimientos**
+   - Programación de mantenimientos (Preventivos/Correctivos)
+   - Asignación de técnicos
+   - Estados: Programado, En Proceso, Completado, Cancelado
+   - Registro automático en historial con transacciones
+   - Validación de fechas
+   - Vista filtrada por rol (Técnico ve solo los suyos)
+
+7. **Dashboard con Datos Reales**
+   - Total de equipos y equipos por estado
+   - Total de mantenimientos y estados
+   - Mantenimientos completados este mes
+   - Mantenimientos pendientes
+   - Equipos críticos
+   - Gráfico de mantenimientos por mes (últimos 6 meses)
+   - Próximos mantenimientos (timeline)
+   - Métricas filtradas por rol
+
+8. **Sistema de Alertas y Notificaciones**
+   - Detección de mantenimientos atrasados
+   - Alertas de mantenimientos próximos (3 días)
+   - Detección de equipos críticos
+   - Badge en sidebar con contador (auto-refresh 30s)
+   - Priorización (Alta, Media, Baja)
+   - Página de alertas con filtros
+   - Alertas filtradas por rol
+
+9. **Datos de Prueba**
+   - Script de seeding con patrón upsert
+   - 4 empresas de ejemplo
+   - 8 usuarios (1 admin, 3 técnicos, 4 clientes)
+   - 39 equipos distribuidos
+   - 70 mantenimientos (pasados y futuros)
+   - Historial automático generado
+
+### 🚧 Pendiente
+
+1. **Gestión de Archivos PDF**
+   - Carga de reportes PDF de mantenimientos
+   - Almacenamiento de archivos
+   - Vista previa de reportes
+
+2. **Exportación de Reportes**
+   - Exportar a PDF (historial, mantenimientos)
+   - Exportar a Excel (listados, estadísticas)
+   - Reportes de auditoría
+
+3. **Vista de Historial Detallado**
+   - Timeline completo de intervenciones por equipo
+   - Historial de trabajos por técnico
+   - Filtros avanzados
+
+4. **Sistema de Emails**
+   - Notificaciones por correo de mantenimientos
+   - Alertas por email
+   - Configuración SMTP
+
+5. **Pruebas y Calidad**
+   - Pruebas unitarias (Jest)
+   - Pruebas de integración
+   - Cobertura > 80%
+
+6. **Documentación Técnica**
+   - Documentación IEEE 830
+   - Documentación de API
+   - Manual de usuario

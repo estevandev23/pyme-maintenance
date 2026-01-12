@@ -5,68 +5,41 @@ Este documento lista todos los archivos/carpetas que son **temporales** y pueden
 ## 🗑️ Eliminar antes de Producción
 
 ### 1. Scripts de Desarrollo
-**Ubicación:** `scripts/dev/` y `scripts/*.js`
+**Ubicación:** `scripts/seed-data.js`
 
-**Qué son:**
-- Scripts para crear usuarios manualmente
-- Herramientas de desarrollo local
-- No necesarios en producción
+**Qué es:**
+- Script para poblar base de datos con datos de prueba
+- Útil durante desarrollo y testing
+- NO necesario en producción
 
 **Cuándo eliminar:**
-- Cuando el sistema tenga panel de usuarios completo
-- Antes del deploy final
-- Ya están en `.gitignore` para no subirlos a Git
+- Antes del deploy a producción
+- Ya está en `.gitignore` para no subirlo a Git
+- El sistema en producción se poblará con datos reales
 
 **Comando:**
 ```bash
-rm -rf scripts/dev/
-rm scripts/*.js
+rm scripts/seed-data.js
 ```
+
+**NOTA:** Mantener durante desarrollo, es muy útil para resetear datos de prueba
 
 ---
 
-### 2. Componentes de Dashboard de v0 (Opcional)
-**Ubicación:** `src/components/maintenance-*.tsx`
+### 2. ✅ Datos Fake en Dashboard - YA SOLUCIONADO
 
-**Qué son:**
-- Componentes del dashboard descargados de v0.dev
-- Usan datos de ejemplo (no reales)
-- Útiles como referencia visual
+**Estado:** COMPLETADO ✅
 
-**Cuándo eliminar:**
-- Cuando conectes el dashboard a datos reales de la BD
-- Cuando implementes tus propios componentes personalizados
+El dashboard ahora está completamente conectado a datos reales de la base de datos:
+- Total de equipos → Query real a Prisma
+- Mantenimientos completados → Query real con filtros
+- Equipos críticos → Calculado en tiempo real
+- Gráficos → Datos reales de los últimos 6 meses
+- Próximos mantenimientos → Query ordenada por fecha
 
-**Archivos:**
-- `maintenance-dashboard.tsx` (ya no se usa, reemplazado por layout)
-- `maintenance-chart.tsx` (se usa pero con datos fake)
-- `maintenance-table.tsx` (se usa pero con datos fake)
-- `metric-card.tsx` (se usa pero con datos fake)
-
-**Decisión:**
-- ✅ Mantener por ahora (son útiles de referencia)
-- 🔄 Reemplazar gradualmente con componentes reales
-
----
-
-### 3. Datos de Ejemplo en Componentes
-
-**Ubicación:** Dentro de los componentes
-
-**Qué son:**
-- Arrays con datos hardcodeados
-- Números falsos en métricas
-- Gráficos con datos de prueba
-
-**Ejemplo en `src/app/(dashboard)/page.tsx`:**
-```typescript
-<MetricCard title="Total Equipos" value="247" ... />
-// ☝️ Este "247" es fake, debe venir de la BD
-```
-
-**Cuándo eliminar:**
-- Al conectar componentes a la API
-- Al implementar queries reales a Prisma
+**Archivos actualizados:**
+- [src/app/(dashboard)/page.tsx](../src/app/(dashboard)/page.tsx)
+- [src/app/api/dashboard/stats/route.ts](../src/app/api/dashboard/stats/route.ts)
 
 ---
 
@@ -96,14 +69,19 @@ rm scripts/*.js
 
 Antes de hacer deploy, verifica:
 
-- [ ] Eliminar `scripts/dev/` y `scripts/*.js`
-- [ ] Reemplazar datos fake con queries reales
+- [ ] Eliminar `scripts/seed-data.js`
+- [x] ~~Reemplazar datos fake con queries reales~~ ✅ Ya hecho
 - [ ] Eliminar console.logs innecesarios
 - [ ] Verificar que `.env` no esté en Git
-- [ ] Actualizar `NEXTAUTH_SECRET` a uno seguro
+- [ ] Actualizar `NEXTAUTH_SECRET` a uno seguro de producción
 - [ ] Configurar variables de entorno de producción
 - [ ] Revisar que no haya contraseñas hardcodeadas
-- [ ] Probar todas las funcionalidades
+- [x] ~~Probar CRUDs básicos~~ ✅ Ya hecho
+- [ ] Implementar sistema de archivos PDF
+- [ ] Implementar exportación de reportes
+- [ ] Pruebas de rendimiento (latencia < 200ms)
+- [ ] Pruebas de seguridad (validación, inyección SQL)
+- [ ] Documentación IEEE 830
 
 ---
 
