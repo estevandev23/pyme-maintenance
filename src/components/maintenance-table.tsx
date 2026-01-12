@@ -1,87 +1,94 @@
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
 
-const maintenanceData = [
-  {
-    id: "MNT-1247",
-    equipo: "Compresor A-203",
-    tecnico: "Carlos Ruiz",
-    estado: "Completado",
-    fecha: "2025-01-03",
-  },
-  {
-    id: "MNT-1246",
-    equipo: "Bomba B-105",
-    tecnico: "Ana García",
-    estado: "En Proceso",
-    fecha: "2025-01-02",
-  },
-  {
-    id: "MNT-1245",
-    equipo: "Motor M-458",
-    tecnico: "Luis Torres",
-    estado: "Pendiente",
-    fecha: "2025-01-02",
-  },
-  {
-    id: "MNT-1244",
-    equipo: "Caldero C-301",
-    tecnico: "María López",
-    estado: "Completado",
-    fecha: "2025-01-01",
-  },
-  {
-    id: "MNT-1243",
-    equipo: "Ventilador V-112",
-    tecnico: "Pedro Sánchez",
-    estado: "Completado",
-    fecha: "2024-12-30",
-  },
-]
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "Completado":
-      return "bg-chart-3/20 text-chart-3 border-chart-3/30"
-    case "En Proceso":
-      return "bg-chart-1/20 text-chart-1 border-chart-1/30"
-    case "Pendiente":
-      return "bg-chart-5/20 text-chart-5 border-chart-5/30"
-    default:
-      return "bg-muted text-muted-foreground"
+interface Mantenimiento {
+  id: string
+  tipo: string
+  estado: string
+  fechaProgramada: Date
+  equipo: {
+    tipo: string
+    marca: string
+    modelo: string | null
+    serial: string
+    empresa: {
+      nombre: string
+    }
+  }
+  tecnico: {
+    nombre: string
   }
 }
 
-export function MaintenanceTable() {
+interface MaintenanceTableProps {
+  data: Mantenimiento[]
+}
+
+const estadoConfig: Record<string, { label: string; color: string }> = {
+  PROGRAMADO: { label: "Programado", color: "bg-blue-500/10 text-blue-700 border-blue-200" },
+  EN_PROCESO: { label: "En Proceso", color: "bg-yellow-500/10 text-yellow-700 border-yellow-200" },
+  COMPLETADO: { label: "Completado", color: "bg-green-500/10 text-green-700 border-green-200" },
+  CANCELADO: { label: "Cancelado", color: "bg-gray-500/10 text-gray-700 border-gray-200" },
+}
+
+const tipoConfig: Record<string, { label: string; color: string }> = {
+  PREVENTIVO: { label: "Preventivo", color: "bg-blue-500/10 text-blue-700 border-blue-200" },
+  CORRECTIVO: { label: "Correctivo", color: "bg-orange-500/10 text-orange-700 border-orange-200" },
+}
+
+export function MaintenanceTable({ data }: MaintenanceTableProps) {
+  if (data.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <p className="text-muted-foreground">No hay mantenimientos próximos</p>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-lg border border-border">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent border-border">
-            <TableHead className="text-muted-foreground">ID</TableHead>
+            <TableHead className="text-muted-foreground">Tipo</TableHead>
             <TableHead className="text-muted-foreground">Equipo</TableHead>
+            <TableHead className="text-muted-foreground">Empresa</TableHead>
             <TableHead className="text-muted-foreground">Técnico</TableHead>
             <TableHead className="text-muted-foreground">Estado</TableHead>
-            <TableHead className="text-muted-foreground">Fecha</TableHead>
+            <TableHead className="text-muted-foreground">Fecha Programada</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {maintenanceData.map((item) => (
+          {data.map((item) => (
             <TableRow key={item.id} className="border-border">
-              <TableCell className="font-mono text-sm text-foreground">{item.id}</TableCell>
-              <TableCell className="font-medium text-foreground">{item.equipo}</TableCell>
-              <TableCell className="text-muted-foreground">{item.tecnico}</TableCell>
               <TableCell>
-                <Badge variant="outline" className={getStatusColor(item.estado)}>
-                  {item.estado}
+                <Badge variant="outline" className={tipoConfig[item.tipo]?.color || "bg-muted"}>
+                  {tipoConfig[item.tipo]?.label || item.tipo}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-col">
+                  <span className="font-medium text-foreground">
+                    {item.equipo.tipo}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {item.equipo.marca} {item.equipo.modelo || ""}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {item.equipo.empresa.nombre}
+              </TableCell>
+              <TableCell className="text-muted-foreground">{item.tecnico.nombre}</TableCell>
+              <TableCell>
+                <Badge variant="outline" className={estadoConfig[item.estado]?.color || "bg-muted"}>
+                  {estadoConfig[item.estado]?.label || item.estado}
                 </Badge>
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {new Date(item.fecha).toLocaleDateString("es-ES", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
+                {format(new Date(item.fechaProgramada), "dd MMM yyyy", { locale: es })}
               </TableCell>
             </TableRow>
           ))}

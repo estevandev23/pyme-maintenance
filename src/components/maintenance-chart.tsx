@@ -2,22 +2,52 @@
 
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 
-const data = [
-  { month: "Ene", preventivo: 45, correctivo: 12 },
-  { month: "Feb", preventivo: 52, correctivo: 18 },
-  { month: "Mar", preventivo: 48, correctivo: 15 },
-  { month: "Abr", preventivo: 61, correctivo: 22 },
-  { month: "May", preventivo: 55, correctivo: 19 },
-  { month: "Jun", preventivo: 67, correctivo: 25 },
-  { month: "Jul", preventivo: 58, correctivo: 16 },
-  { month: "Ago", preventivo: 64, correctivo: 21 },
-]
+interface MaintenanceChartProps {
+  data: Array<{
+    mes: string
+    preventivo: number
+    correctivo: number
+  }>
+}
 
-export function MaintenanceChart() {
+const monthNames: Record<string, string> = {
+  "01": "Ene",
+  "02": "Feb",
+  "03": "Mar",
+  "04": "Abr",
+  "05": "May",
+  "06": "Jun",
+  "07": "Jul",
+  "08": "Ago",
+  "09": "Sep",
+  "10": "Oct",
+  "11": "Nov",
+  "12": "Dic",
+}
+
+export function MaintenanceChart({ data }: MaintenanceChartProps) {
+  // Transformar los datos para el gráfico
+  const chartData = data.map(item => {
+    const [year, month] = item.mes.split("-")
+    return {
+      month: monthNames[month] || month,
+      preventivo: item.preventivo,
+      correctivo: item.correctivo,
+    }
+  })
+
+  if (chartData.length === 0) {
+    return (
+      <div className="flex h-[300px] items-center justify-center">
+        <p className="text-muted-foreground">No hay datos disponibles</p>
+      </div>
+    )
+  }
+
   return (
     <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="colorPreventivo" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
