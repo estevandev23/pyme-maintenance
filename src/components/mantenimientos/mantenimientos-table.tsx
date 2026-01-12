@@ -1,6 +1,6 @@
 "use client"
 
-import { MoreHorizontal, Wrench, Calendar, User, Building2 } from "lucide-react"
+import { MoreHorizontal, Wrench, Calendar, User, Building2, FileText } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import {
@@ -126,6 +126,7 @@ export function MantenimientosTable({
               <TableHead>Técnico</TableHead>
               <TableHead>Fecha Programada</TableHead>
               <TableHead>Fecha Realizada</TableHead>
+              <TableHead className="text-center">Reporte</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -186,6 +187,27 @@ export function MantenimientosTable({
                         {format(new Date(mantenimiento.fechaRealizada), "dd/MM/yyyy", { locale: es })}
                       </span>
                     </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-center">
+                  {mantenimiento.reporteUrl ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                    >
+                      <a
+                        href={mantenimiento.reporteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2"
+                      >
+                        <FileText className="h-4 w-4" />
+                        <span className="hidden sm:inline">Ver PDF</span>
+                      </a>
+                    </Button>
                   ) : (
                     <span className="text-sm text-muted-foreground">-</span>
                   )}

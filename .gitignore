@@ -32,6 +32,10 @@ scripts/dev/
 scripts/*.js
 !scripts/README.md
 
+# Uploads (archivos subidos por usuarios)
+public/uploads/**/*
+!public/uploads/**/.gitkeep
+
 # OS
 .DS_Store
 *.pem

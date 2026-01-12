@@ -4,9 +4,10 @@ import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { format } from "date-fns"
-import { CalendarIcon, Loader2 } from "lucide-react"
+import { CalendarIcon, Loader2, FileText, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { mantenimientoSchema, type MantenimientoInput } from "@/lib/validations/mantenimiento"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -74,6 +75,8 @@ export function MantenimientoForm({
 }: MantenimientoFormProps) {
   const [fechaProgramadaOpen, setFechaProgramadaOpen] = useState(false)
   const [fechaRealizadaOpen, setFechaRealizadaOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const form = useForm<MantenimientoInput>({
     resolver: zodResolver(mantenimientoSchema),
@@ -120,9 +123,60 @@ export function MantenimientoForm({
     }
   }, [mantenimiento, form])
 
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validar tipo
+    if (file.type !== "application/pdf") {
+      toast.error("Solo se permiten archivos PDF")
+      return
+    }
+
+    // Validar tamaño (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("El archivo excede el tamaño máximo de 5MB")
+      return
+    }
+
+    setSelectedFile(file)
+
+    // Subir archivo
+    try {
+      setUploading(true)
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Error al subir archivo")
+      }
+
+      const result = await response.json()
+      form.setValue("reporteUrl", result.url)
+      toast.success("Archivo subido exitosamente")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error al subir archivo")
+      setSelectedFile(null)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null)
+    form.setValue("reporteUrl", null)
+  }
+
   const handleSubmit = async (data: MantenimientoInput) => {
     await onSubmit(data)
     form.reset()
+    setSelectedFile(null)
   }
 
   return (
@@ -384,13 +438,41 @@ export function MantenimientoForm({
               name="reporteUrl"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>URL del Reporte (Opcional)</FormLabel>
+                  <FormLabel>Reporte PDF (Opcional)</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="https://ejemplo.com/reporte.pdf"
-                      {...field}
-                      value={field.value || ""}
-                    />
+                    <div className="space-y-2">
+                      {!field.value ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            onChange={handleFileChange}
+                            disabled={uploading}
+                            className="flex-1"
+                          />
+                          {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="flex-1 text-sm truncate">
+                            {selectedFile?.name || "Reporte adjunto"}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleRemoveFile}
+                            disabled={uploading}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Formatos aceptados: PDF. Tamaño máximo: 5MB
+                      </p>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
