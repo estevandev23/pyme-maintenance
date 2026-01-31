@@ -19,32 +19,49 @@ export async function GET(request: NextRequest) {
     const tecnicoId = searchParams.get("tecnicoId")
     const equipoId = searchParams.get("equipoId")
     const empresaId = searchParams.get("empresaId")
+    const search = searchParams.get("search")
 
-    const where: any = {}
+    const andFilters: any[] = []
 
-    if (estado) where.estado = estado
-    if (tipo) where.tipo = tipo
-    if (tecnicoId) where.tecnicoId = tecnicoId
-    if (equipoId) where.equipoId = equipoId
+    if (estado) andFilters.push({ estado })
+    if (tipo) andFilters.push({ tipo })
+    if (tecnicoId) andFilters.push({ tecnicoId })
+    if (equipoId) andFilters.push({ equipoId })
 
-    // Si es técnico, solo ver sus mantenimientos
+    // Búsqueda multi-término
+    if (search) {
+      const searchTerms = search.split(/\s+/).filter(term => term.length > 0)
+      searchTerms.forEach(term => {
+        andFilters.push({
+          OR: [
+            {
+              equipo: {
+                OR: [
+                  { tipo: { contains: term, mode: 'insensitive' } },
+                  { marca: { contains: term, mode: 'insensitive' } },
+                  { serial: { contains: term, mode: 'insensitive' } },
+                  { modelo: { contains: term, mode: 'insensitive' } },
+                ]
+              }
+            },
+            { descripcion: { contains: term, mode: 'insensitive' } }
+          ]
+        })
+      })
+    }
+
+    // Role filters y filtros por empresa
     if (session.user.role === "TECNICO") {
-      where.tecnicoId = session.user.id
+      andFilters.push({ tecnicoId: session.user.id })
     }
 
-    // Si es cliente, solo ver mantenimientos de su empresa
     if (session.user.role === "CLIENTE" && session.user.empresaId) {
-      where.equipo = {
-        empresaId: session.user.empresaId
-      }
+      andFilters.push({ equipo: { empresaId: session.user.empresaId } })
+    } else if (empresaId && empresaId !== "all" && session.user.role === "ADMIN") {
+      andFilters.push({ equipo: { empresaId: empresaId } })
     }
 
-    // Filtro por empresa (solo para admin)
-    if (empresaId && session.user.role === "ADMIN") {
-      where.equipo = {
-        empresaId: empresaId
-      }
-    }
+    const where = andFilters.length > 0 ? { AND: andFilters } : {}
 
     const mantenimientos = await prisma.mantenimiento.findMany({
       where,

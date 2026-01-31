@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Wrench, Filter, FileDown, FileSpreadsheet } from "lucide-react"
+import { Plus, Wrench, Filter, FileDown, FileSpreadsheet, Search } from "lucide-react"
 import { Header } from "@/components/dashboard/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,41 +21,15 @@ import {
 import { MantenimientosTable } from "@/components/mantenimientos/mantenimientos-table"
 import { MantenimientoForm } from "@/components/mantenimientos/mantenimiento-form"
 import { toast } from "sonner"
+import { Input } from "@/components/ui/input"
 import { useSession } from "next-auth/react"
 import type { MantenimientoInput } from "@/lib/validations/mantenimiento"
 import { exportMantenimientosToExcel } from "@/lib/excel-export"
 import { exportMantenimientosToPDF } from "@/lib/pdf-export"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import type { Mantenimiento } from "@/types/mantenimiento"
 
-interface Mantenimiento {
-  id: string
-  equipoId: string
-  tecnicoId: string
-  tipo: "PREVENTIVO" | "CORRECTIVO"
-  estado: "PROGRAMADO" | "EN_PROCESO" | "COMPLETADO" | "CANCELADO"
-  fechaProgramada: Date
-  fechaRealizada: Date | null
-  descripcion: string
-  observaciones: string | null
-  reporteUrl: string | null
-  equipo: {
-    id: string
-    tipo: string
-    marca: string
-    modelo: string | null
-    serial: string
-    empresa: {
-      id: string
-      nombre: string
-    }
-  }
-  tecnico: {
-    id: string
-    nombre: string
-    email: string
-  }
-}
 
 interface Equipo {
   id: string
@@ -92,6 +66,7 @@ export default function MantenimientosPage() {
   const [filterTipo, setFilterTipo] = useState<string>("all")
   const [filterTecnico, setFilterTecnico] = useState<string>("all")
   const [filterEmpresa, setFilterEmpresa] = useState<string>("all")
+  const [searchQuery, setSearchQuery] = useState<string>("")
 
   useEffect(() => {
     fetchEmpresas()
@@ -101,8 +76,11 @@ export default function MantenimientosPage() {
   }, [])
 
   useEffect(() => {
-    fetchMantenimientos()
-  }, [filterEstado, filterTipo, filterTecnico, filterEmpresa])
+    const timer = setTimeout(() => {
+      fetchMantenimientos()
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [filterEstado, filterTipo, filterTecnico, filterEmpresa, searchQuery])
 
   const fetchEmpresas = async () => {
     try {
@@ -147,6 +125,7 @@ export default function MantenimientosPage() {
       if (filterTipo !== "all") params.append("tipo", filterTipo)
       if (filterTecnico !== "all") params.append("tecnicoId", filterTecnico)
       if (filterEmpresa !== "all") params.append("empresaId", filterEmpresa)
+      if (searchQuery) params.append("search", searchQuery)
 
       const response = await fetch(`/api/mantenimientos?${params.toString()}`)
       if (!response.ok) throw new Error("Error al cargar mantenimientos")
@@ -298,7 +277,17 @@ export default function MantenimientosPage() {
 
       <div className="border-b border-border bg-card px-6 py-4">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por equipo, serial o marca..."
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="h-6 w-px bg-border mx-1 hidden md:block" />
             <Filter className="h-4 w-4 text-muted-foreground" />
             <div className="flex gap-2 flex-wrap">
               <Select value={filterEstado} onValueChange={setFilterEstado}>
@@ -413,7 +402,7 @@ export default function MantenimientosPage() {
                   mantenimientos={mantenimientos}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
-                  userRole={session?.user?.role}
+                  userRole={session?.user?.role as "ADMIN" | "TECNICO" | "CLIENTE" | undefined}
                 />
               )}
             </CardContent>

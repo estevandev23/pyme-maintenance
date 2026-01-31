@@ -3,6 +3,7 @@
 import { MoreHorizontal, Wrench, Calendar, User, Building2, FileText } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import type { Mantenimiento } from "@/types/mantenimiento"
 import {
   Table,
   TableBody,
@@ -31,32 +32,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useState } from "react"
 
-interface Mantenimiento {
-  id: string
-  tipo: "PREVENTIVO" | "CORRECTIVO"
-  estado: "PROGRAMADO" | "EN_PROCESO" | "COMPLETADO" | "CANCELADO"
-  fechaProgramada: Date
-  fechaRealizada: Date | null
-  descripcion: string
-  observaciones: string | null
-  reporteUrl: string | null
-  equipo: {
-    id: string
-    tipo: string
-    marca: string
-    modelo: string | null
-    serial: string
-    empresa: {
-      id: string
-      nombre: string
-    }
-  }
-  tecnico: {
-    id: string
-    nombre: string
-    email: string
-  }
-}
 
 interface MantenimientosTableProps {
   mantenimientos: Mantenimiento[]

@@ -8,6 +8,7 @@ import { CalendarIcon, Loader2, FileText, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { mantenimientoSchema, type MantenimientoInput } from "@/lib/validations/mantenimiento"
 import { toast } from "sonner"
+import type { Mantenimiento } from "@/types/mantenimiento"
 import {
   Dialog,
   DialogContent,
@@ -41,18 +42,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-interface Mantenimiento {
-  id: string
-  equipoId: string
-  tecnicoId: string
-  tipo: "PREVENTIVO" | "CORRECTIVO"
-  estado: "PROGRAMADO" | "EN_PROCESO" | "COMPLETADO" | "CANCELADO"
-  fechaProgramada: Date
-  fechaRealizada: Date | null
-  descripcion: string
-  observaciones: string | null
-  reporteUrl: string | null
-}
 
 interface MantenimientoFormProps {
   mantenimiento?: Mantenimiento
