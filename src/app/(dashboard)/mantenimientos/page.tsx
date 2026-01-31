@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Plus, Wrench, Filter, FileDown, FileSpreadsheet, Search, X } from "lucide-react"
+import { Plus, Wrench, Filter, FileDown, FileSpreadsheet, Search, X, Bell } from "lucide-react"
 import { Header } from "@/components/dashboard/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -75,6 +75,7 @@ export default function MantenimientosPage() {
   const [filterTecnico, setFilterTecnico] = useState<string>("all")
   const [filterEmpresa, setFilterEmpresa] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState<string>("")
+  const [filterAlerta, setFilterAlerta] = useState<boolean>(false)
 
   useEffect(() => {
     fetchEmpresas()
@@ -239,6 +240,28 @@ export default function MantenimientosPage() {
     router.push("/mantenimientos")
   }
 
+  // Función para verificar si un mantenimiento está en alerta
+  const isInAlert = (mant: Mantenimiento): boolean => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const fechaProgramada = new Date(mant.fechaProgramada)
+    fechaProgramada.setHours(0, 0, 0, 0)
+    const diffDays = Math.ceil((fechaProgramada.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (mant.estado === "COMPLETADO" || mant.estado === "CANCELADO") return false
+    if (diffDays < 0 && (mant.estado === "PROGRAMADO" || mant.estado === "EN_PROCESO")) return true
+    if (diffDays >= 0 && diffDays <= 3 && mant.estado === "PROGRAMADO") return true
+    return false
+  }
+
+  // Filtrar mantenimientos por alerta (client-side)
+  const mantenimientosFiltrados = filterAlerta
+    ? mantenimientos.filter(isInAlert)
+    : mantenimientos
+
+  // Contar alertas activas
+  const alertasCount = mantenimientos.filter(isInAlert).length
+
   const handleExportExcel = () => {
     try {
       const dataToExport = mantenimientos.map((mant) => ({
@@ -289,20 +312,63 @@ export default function MantenimientosPage() {
       />
 
       <div className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col gap-4">
+          {/* Fila 1: Buscador y botones de acción */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar por equipo, serial o marca..."
-                className="pl-9"
+                className="pl-9 w-full"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <div className="h-6 w-px bg-border mx-1 hidden md:block" />
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button
+                variant={filterAlerta ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilterAlerta(!filterAlerta)}
+                className={filterAlerta ? "bg-red-500 hover:bg-red-600" : ""}
+              >
+                <Bell className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">En Alerta</span>
+                {alertasCount > 0 && (
+                  <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${filterAlerta ? "bg-white text-red-600" : "bg-red-500 text-white"}`}>
+                    {alertasCount}
+                  </span>
+                )}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <FileDown className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Exportar</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExportExcel}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Exportar a Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportPDF}>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Exportar a PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {canCreate && (
+                <Button onClick={() => setFormOpen(true)}>
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Nuevo Mantenimiento</span>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Fila 2: Filtros */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
               <Select value={filterEstado} onValueChange={setFilterEstado}>
                 <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="Estado" />
@@ -358,33 +424,6 @@ export default function MantenimientosPage() {
                   </Select>
                 </>
               )}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <FileDown className="mr-2 h-4 w-4" />
-                  Exportar
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportExcel}>
-                  <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Exportar a Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportPDF}>
-                  <FileDown className="mr-2 h-4 w-4" />
-                  Exportar a PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {canCreate && (
-              <Button onClick={() => setFormOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo Mantenimiento
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -419,7 +458,10 @@ export default function MantenimientosPage() {
                 <div>
                   <CardTitle>Listado de Mantenimientos</CardTitle>
                   <CardDescription>
-                    {mantenimientos.length} {mantenimientos.length === 1 ? "mantenimiento registrado" : "mantenimientos registrados"}
+                    {filterAlerta
+                      ? `${mantenimientosFiltrados.length} de ${mantenimientos.length} en alerta`
+                      : `${mantenimientos.length} ${mantenimientos.length === 1 ? "mantenimiento registrado" : "mantenimientos registrados"}`
+                    }
                   </CardDescription>
                 </div>
               </div>
@@ -431,7 +473,7 @@ export default function MantenimientosPage() {
                 </div>
               ) : (
                 <MantenimientosTable
-                  mantenimientos={mantenimientos}
+                  mantenimientos={mantenimientosFiltrados}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   userRole={session?.user?.role as "ADMIN" | "TECNICO" | "CLIENTE" | undefined}

@@ -92,9 +92,13 @@ export function MantenimientoForm({
         tecnicoId: mantenimiento.tecnicoId,
         tipo: mantenimiento.tipo,
         estado: mantenimiento.estado,
-        fechaProgramada: format(new Date(mantenimiento.fechaProgramada), "yyyy-MM-dd"),
+        fechaProgramada: (typeof (mantenimiento.fechaProgramada as any) === 'string' 
+          ? (mantenimiento.fechaProgramada as unknown as string) 
+          : (mantenimiento.fechaProgramada as Date).toISOString()).split('T')[0],
         fechaRealizada: mantenimiento.fechaRealizada
-          ? format(new Date(mantenimiento.fechaRealizada), "yyyy-MM-dd")
+          ? (typeof (mantenimiento.fechaRealizada as any) === 'string' 
+              ? (mantenimiento.fechaRealizada as unknown as string) 
+              : (mantenimiento.fechaRealizada as Date).toISOString()).split('T')[0]
           : null,
         descripcion: mantenimiento.descripcion,
         observaciones: mantenimiento.observaciones,
@@ -182,7 +186,7 @@ export function MantenimientoForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>
             {mantenimiento ? "Editar Mantenimiento" : "Nuevo Mantenimiento"}
@@ -234,14 +238,22 @@ export function MantenimientoForm({
                       disabled={!!mantenimiento || !selectedEmpresaId}
                     >
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={selectedEmpresaId ? "Selecciona un equipo" : "Primero selecciona empresa"} />
+                        <SelectTrigger className="w-full overflow-hidden">
+                          <div className="truncate text-left">
+                            {field.value ? (() => {
+                              const equipo = equipos.find(e => e.id === field.value)
+                              if (!equipo) return selectedEmpresaId ? "Selecciona un equipo" : "Primero selecciona empresa"
+                              return `${equipo.tipo} - ${equipo.marca} ${equipo.modelo || ""} (S/N: ${equipo.serial})`
+                            })() : (selectedEmpresaId ? "Selecciona un equipo" : "Primero selecciona empresa")}
+                          </div>
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
+                      <SelectContent className="max-w-[min(calc(100vw-2rem),500px)]">
                         {filteredEquipos.map((equipo) => (
                           <SelectItem key={equipo.id} value={equipo.id}>
-                            {equipo.tipo} - {equipo.marca} {equipo.modelo || ""} (S/N: {equipo.serial})
+                            <span className="whitespace-normal break-words">
+                              {equipo.tipo} - {equipo.marca} {equipo.modelo || ""} (S/N: {equipo.serial})
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -351,7 +363,7 @@ export function MantenimientoForm({
                             )}
                           >
                             {field.value ? (
-                              format(new Date(field.value), "dd/MM/yyyy")
+                              format(new Date(field.value.includes('T') ? field.value : field.value + "T00:00:00"), "dd/MM/yyyy")
                             ) : (
                               <span>Selecciona una fecha</span>
                             )}
@@ -362,7 +374,7 @@ export function MantenimientoForm({
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
-                          selected={field.value ? new Date(field.value) : undefined}
+                          selected={field.value ? new Date(field.value.includes('T') ? field.value : field.value + "T00:00:00") : undefined}
                           onSelect={(date) => {
                             field.onChange(date ? format(date, "yyyy-MM-dd") : "")
                             setFechaProgramadaOpen(false)
@@ -393,7 +405,7 @@ export function MantenimientoForm({
                             )}
                           >
                             {field.value ? (
-                              format(new Date(field.value), "dd/MM/yyyy")
+                              format(new Date(field.value.includes('T') ? field.value : field.value + "T00:00:00"), "dd/MM/yyyy")
                             ) : (
                               <span>Selecciona una fecha</span>
                             )}
@@ -404,7 +416,7 @@ export function MantenimientoForm({
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
-                          selected={field.value ? new Date(field.value) : undefined}
+                          selected={field.value ? new Date(field.value.includes('T') ? field.value : field.value + "T00:00:00") : undefined}
                           onSelect={(date) => {
                             field.onChange(date ? format(date, "yyyy-MM-dd") : null)
                             setFechaRealizadaOpen(false)

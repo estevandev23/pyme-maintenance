@@ -1,8 +1,9 @@
 "use client"
 
-import { MoreHorizontal, Wrench, Calendar, User, Building2, FileText } from "lucide-react"
+import { MoreHorizontal, Wrench, Calendar, User, Building2, FileText, AlertTriangle, Clock } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import Link from "next/link"
 import type { Mantenimiento } from "@/types/mantenimiento"
 import {
   Table,
@@ -30,6 +31,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useState } from "react"
 
 
@@ -50,6 +56,35 @@ const estadoConfig = {
 const tipoConfig = {
   PREVENTIVO: { label: "Preventivo", color: "bg-blue-500/10 text-blue-700 border-blue-200" },
   CORRECTIVO: { label: "Correctivo", color: "bg-orange-500/10 text-orange-700 border-orange-200" },
+}
+
+// Función para calcular el estado de alerta
+function getAlertStatus(mantenimiento: Mantenimiento): { tipo: "ATRASADO" | "PROXIMO" | null; dias: number } {
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+
+  const fechaProgramada = new Date(mantenimiento.fechaProgramada)
+  fechaProgramada.setHours(0, 0, 0, 0)
+
+  const diffTime = fechaProgramada.getTime() - hoy.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  // Si ya está completado o cancelado, no hay alerta
+  if (mantenimiento.estado === "COMPLETADO" || mantenimiento.estado === "CANCELADO") {
+    return { tipo: null, dias: diffDays }
+  }
+
+  // Atrasado: fecha pasada y aún no completado
+  if (diffDays < 0 && (mantenimiento.estado === "PROGRAMADO" || mantenimiento.estado === "EN_PROCESO")) {
+    return { tipo: "ATRASADO", dias: Math.abs(diffDays) }
+  }
+
+  // Próximo: en los próximos 3 días y programado
+  if (diffDays >= 0 && diffDays <= 3 && mantenimiento.estado === "PROGRAMADO") {
+    return { tipo: "PROXIMO", dias: diffDays }
+  }
+
+  return { tipo: null, dias: diffDays }
 }
 
 export function MantenimientosTable({
@@ -90,24 +125,60 @@ export function MantenimientosTable({
 
   return (
     <>
-      <div className="rounded-md border">
-        <Table>
+      <div className="rounded-md border overflow-x-auto">
+        <Table className="min-w-[600px]">
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]"></TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Equipo</TableHead>
-              <TableHead>Empresa</TableHead>
-              <TableHead>Técnico</TableHead>
-              <TableHead>Fecha Programada</TableHead>
-              <TableHead>Fecha Realizada</TableHead>
-              <TableHead className="text-center">Reporte</TableHead>
+              <TableHead className="hidden lg:table-cell">Empresa</TableHead>
+              <TableHead className="hidden md:table-cell">Técnico</TableHead>
+              <TableHead>Fecha Prog.</TableHead>
+              <TableHead className="hidden sm:table-cell">Fecha Real.</TableHead>
+              <TableHead className="text-center hidden sm:table-cell">Reporte</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {mantenimientos.map((mantenimiento) => (
-              <TableRow key={mantenimiento.id}>
+            {mantenimientos.map((mantenimiento) => {
+              const alertStatus = getAlertStatus(mantenimiento)
+              const rowClass = alertStatus.tipo === "ATRASADO"
+                ? "bg-red-50 hover:bg-red-100"
+                : alertStatus.tipo === "PROXIMO"
+                  ? "bg-yellow-50 hover:bg-yellow-100"
+                  : ""
+
+              return (
+              <TableRow key={mantenimiento.id} className={rowClass}>
+                <TableCell className="w-[40px] px-2">
+                  {alertStatus.tipo && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link href="/alertas" className="block">
+                          {alertStatus.tipo === "ATRASADO" ? (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white">
+                              <AlertTriangle className="h-4 w-4" />
+                            </div>
+                          ) : (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 text-white">
+                              <Clock className="h-4 w-4" />
+                            </div>
+                          )}
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {alertStatus.tipo === "ATRASADO"
+                          ? `Atrasado ${alertStatus.dias} día${alertStatus.dias > 1 ? "s" : ""}`
+                          : alertStatus.dias === 0
+                            ? "Programado para hoy"
+                            : `En ${alertStatus.dias} día${alertStatus.dias > 1 ? "s" : ""}`
+                        }
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={tipoConfig[mantenimiento.tipo].color}>
                     {tipoConfig[mantenimiento.tipo].label}
@@ -131,13 +202,13 @@ export function MantenimientosTable({
                     </span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden lg:table-cell">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">{mantenimiento.equipo.empresa.nombre}</span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <div className="flex flex-col">
@@ -154,7 +225,7 @@ export function MantenimientosTable({
                     </span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden sm:table-cell">
                   {mantenimiento.fechaRealizada ? (
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-green-600" />
@@ -166,7 +237,7 @@ export function MantenimientosTable({
                     <span className="text-sm text-muted-foreground">-</span>
                   )}
                 </TableCell>
-                <TableCell className="text-center">
+                <TableCell className="text-center hidden sm:table-cell">
                   {mantenimiento.reporteUrl ? (
                     <Button
                       variant="outline"
@@ -180,7 +251,7 @@ export function MantenimientosTable({
                         className="flex items-center gap-2"
                       >
                         <FileText className="h-4 w-4" />
-                        <span className="hidden sm:inline">Ver PDF</span>
+                        Ver PDF
                       </a>
                     </Button>
                   ) : (
@@ -217,7 +288,8 @@ export function MantenimientosTable({
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       </div>
