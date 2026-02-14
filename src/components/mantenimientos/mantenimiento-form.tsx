@@ -296,11 +296,17 @@ export function MantenimientoForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {filteredTecnicos.map((tecnico) => (
-                        <SelectItem key={tecnico.id} value={tecnico.id}>
-                          {tecnico.nombre} ({tecnico.email})
+                      {filteredTecnicos.length > 0 ? (
+                        filteredTecnicos.map((tecnico) => (
+                          <SelectItem key={tecnico.id} value={tecnico.id}>
+                            {tecnico.nombre} ({tecnico.email})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no_tecnicos" disabled>
+                          Sin técnicos registrados
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
