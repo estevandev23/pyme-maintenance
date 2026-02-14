@@ -251,7 +251,7 @@ export function UsuarioForm({
                 name="empresaId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Empresa {selectedRole === "CLIENTE" && "*"}</FormLabel>
+                    <FormLabel>Empresa {(selectedRole === "CLIENTE" || selectedRole === "TECNICO") && "*"}</FormLabel>
                     <Select
                       onValueChange={field.onChange}
                       defaultValue={field.value || undefined}
@@ -259,11 +259,13 @@ export function UsuarioForm({
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Sin empresa" />
+                          <SelectValue placeholder="Seleccione una empresa" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="null">Sin empresa</SelectItem>
+                        {selectedRole !== "TECNICO" && (
+                          <SelectItem value="null">Sin empresa</SelectItem>
+                        )}
                         {empresas.map((empresa) => (
                           <SelectItem key={empresa.id} value={empresa.id}>
                             {empresa.nombre}
