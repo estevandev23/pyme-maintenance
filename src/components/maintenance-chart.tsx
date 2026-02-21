@@ -3,7 +3,7 @@
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 
 interface MaintenanceChartProps {
-  data: Array<{
+  data?: Array<{
     mes: string
     preventivo: number
     correctivo: number
@@ -25,7 +25,17 @@ const monthNames: Record<string, string> = {
   "12": "Dic",
 }
 
-export function MaintenanceChart({ data }: MaintenanceChartProps) {
+// Datos de ejemplo por defecto
+const defaultData = [
+  { mes: "2024-01", preventivo: 12, correctivo: 5 },
+  { mes: "2024-02", preventivo: 15, correctivo: 3 },
+  { mes: "2024-03", preventivo: 18, correctivo: 7 },
+  { mes: "2024-04", preventivo: 14, correctivo: 4 },
+  { mes: "2024-05", preventivo: 20, correctivo: 6 },
+  { mes: "2024-06", preventivo: 22, correctivo: 8 },
+]
+
+export function MaintenanceChart({ data = defaultData }: MaintenanceChartProps) {
   // Transformar los datos para el gráfico
   const chartData = data.map(item => {
     const [year, month] = item.mes.split("-")

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Plus, Wrench, Filter, FileDown, FileSpreadsheet, Search, X } from "lucide-react"
@@ -54,7 +54,7 @@ interface Empresa {
   nit: string
 }
 
-export default function EquiposPage() {
+function EquiposPageContent() {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -416,5 +416,13 @@ export default function EquiposPage() {
         clienteEmpresaId={isCliente ? session?.user?.empresaId : undefined}
       />
     </>
+  )
+}
+
+export default function EquiposPage() {
+  return (
+    <Suspense fallback={<div>Cargando...</div>}>
+      <EquiposPageContent />
+    </Suspense>
   )
 }

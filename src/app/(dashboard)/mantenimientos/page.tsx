@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Plus, Wrench, Filter, FileDown, FileSpreadsheet, Search, X, Bell } from "lucide-react"
 import { Header } from "@/components/dashboard/header"
@@ -55,7 +55,8 @@ interface Empresa {
   nombre: string
 }
 
-export default function MantenimientosPage() {
+
+function MantenimientosPageContent() {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -525,5 +526,13 @@ export default function MantenimientosPage() {
         clienteEmpresaId={session?.user?.role === "CLIENTE" ? session?.user?.empresaId ?? undefined : undefined}
       />
     </>
+  )
+}
+
+export default function MantenimientosPage() {
+  return (
+    <Suspense fallback={<div>Cargando...</div>}>
+      <MantenimientosPageContent />
+    </Suspense>
   )
 }

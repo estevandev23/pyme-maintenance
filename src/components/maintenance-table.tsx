@@ -23,7 +23,7 @@ interface Mantenimiento {
 }
 
 interface MaintenanceTableProps {
-  data: Mantenimiento[]
+  data?: Mantenimiento[]
 }
 
 const estadoConfig: Record<string, { label: string; color: string }> = {
@@ -38,7 +38,10 @@ const tipoConfig: Record<string, { label: string; color: string }> = {
   CORRECTIVO: { label: "Correctivo", color: "bg-orange-500/10 text-orange-700 border-orange-200" },
 }
 
-export function MaintenanceTable({ data }: MaintenanceTableProps) {
+// Datos de ejemplo por defecto
+const defaultData: Mantenimiento[] = []
+
+export function MaintenanceTable({ data = defaultData }: MaintenanceTableProps) {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">

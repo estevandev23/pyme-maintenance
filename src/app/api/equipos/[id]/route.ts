@@ -194,7 +194,7 @@ export async function PUT(
 // DELETE /api/equipos/[id] - Eliminar equipo
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -207,6 +207,8 @@ export async function DELETE(
     if (session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
     }
+
+    const { id } = await params
 
     // Verificar que el equipo existe
     const equipo = await prisma.equipo.findUnique({

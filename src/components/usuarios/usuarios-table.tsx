@@ -37,6 +37,7 @@ interface Usuario {
   nombre: string
   role: "ADMIN" | "TECNICO" | "CLIENTE"
   activo: boolean
+  empresaId: string | null
   empresa: {
     id: string
     nombre: string

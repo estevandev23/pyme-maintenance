@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
 
     // Ordenar alertas por prioridad y fecha
     alertas.sort((a, b) => {
-      const prioridadOrden = { ALTA: 0, MEDIA: 1, BAJA: 2 }
+      const prioridadOrden: Record<string, number> = { ALTA: 0, MEDIA: 1, BAJA: 2 }
       if (prioridadOrden[a.prioridad] !== prioridadOrden[b.prioridad]) {
         return prioridadOrden[a.prioridad] - prioridadOrden[b.prioridad]
       }
