@@ -128,8 +128,9 @@ export async function PUT(
       if (existingEquipo.empresaId !== session.user.empresaId) {
         return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
       }
-      // Cliente no puede cambiar de empresa
+      // Cliente no puede cambiar de empresa ni el estado del equipo
       delete validatedData.empresaId
+      delete validatedData.estado
     }
 
     // Si se actualiza el serial, verificar que no exista
