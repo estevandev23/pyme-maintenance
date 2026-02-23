@@ -185,6 +185,7 @@ export function EquipoForm({
                       onValueChange={field.onChange}
                       defaultValue={field.value}
                       value={field.value}
+                      disabled={isCliente}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -204,7 +205,7 @@ export function EquipoForm({
                 )}
               />
 
-              {equipo && (
+              {equipo && !isCliente && (
                 <FormField
                   control={form.control}
                   name="estado"

@@ -100,6 +100,13 @@ const tipoConfig = {
   CORRECTIVO: { label: "Correctivo", color: "bg-orange-500/10 text-orange-700 border-orange-200" },
 }
 
+const estadoConfig: Record<string, { label: string; color: string }> = {
+  PROGRAMADO: { label: "Programado", color: "bg-blue-500/10 text-blue-700 border-blue-200" },
+  EN_PROCESO: { label: "En Proceso", color: "bg-yellow-500/10 text-yellow-700 border-yellow-200" },
+  COMPLETADO: { label: "Completado", color: "bg-green-500/10 text-green-700 border-green-200" },
+  CANCELADO: { label: "Cancelado", color: "bg-gray-500/10 text-gray-700 border-gray-200" },
+}
+
 export default function HistorialPage() {
   const { data: session } = useSession()
   const [historial, setHistorial] = useState<HistorialItem[]>([])
@@ -148,6 +155,7 @@ export default function HistorialPage() {
 
   const isAdmin = session?.user?.role === "ADMIN"
   const isTecnico = session?.user?.role === "TECNICO"
+  const isCliente = session?.user?.role === "CLIENTE"
 
   useEffect(() => {
     fetchEquipos()
@@ -440,7 +448,7 @@ export default function HistorialPage() {
                   <History className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <CardTitle>Historial Completo</CardTitle>
+                  <CardTitle>{isCliente ? "Historial de mis Equipos" : "Historial Completo"}</CardTitle>
                   <CardDescription>
                     {totalItems} {totalItems === 1 ? "registro encontrado" : "registros encontrados"}
                   </CardDescription>
@@ -470,8 +478,9 @@ export default function HistorialPage() {
                         <TableRow>
                           <TableHead>Fecha</TableHead>
                           <TableHead>Equipo</TableHead>
-                          <TableHead>Empresa</TableHead>
+                          {!isCliente && <TableHead>Empresa</TableHead>}
                           <TableHead>Tipo</TableHead>
+                          <TableHead>Estado</TableHead>
                           <TableHead>Técnico</TableHead>
                           <TableHead className="max-w-[300px]">Observaciones</TableHead>
                         </TableRow>
@@ -502,9 +511,11 @@ export default function HistorialPage() {
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell>
-                              <span className="text-sm">{item.equipo.empresa.nombre}</span>
-                            </TableCell>
+                            {!isCliente && (
+                              <TableCell>
+                                <span className="text-sm">{item.equipo.empresa.nombre}</span>
+                              </TableCell>
+                            )}
                             <TableCell>
                               {item.mantenimiento?.tipo ? (
                                 <Badge
@@ -512,6 +523,18 @@ export default function HistorialPage() {
                                   className={tipoConfig[item.mantenimiento.tipo].color}
                                 >
                                   {tipoConfig[item.mantenimiento.tipo].label}
+                                </Badge>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {item.mantenimiento?.estado ? (
+                                <Badge
+                                  variant="outline"
+                                  className={estadoConfig[item.mantenimiento.estado]?.color || ""}
+                                >
+                                  {estadoConfig[item.mantenimiento.estado]?.label || item.mantenimiento.estado}
                                 </Badge>
                               ) : (
                                 <span className="text-sm text-muted-foreground">-</span>

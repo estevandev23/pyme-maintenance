@@ -53,6 +53,10 @@ interface MantenimientoFormProps {
   onSubmit: (data: MantenimientoInput) => Promise<void>
   isLoading: boolean
   clienteEmpresaId?: string
+  prefillData?: {
+    equipoId?: string
+    descripcion?: string
+  }
 }
 
 export function MantenimientoForm({
@@ -65,6 +69,7 @@ export function MantenimientoForm({
   onSubmit,
   isLoading,
   clienteEmpresaId,
+  prefillData,
 }: MantenimientoFormProps) {
   const [fechaProgramadaOpen, setFechaProgramadaOpen] = useState(false)
   const [fechaRealizadaOpen, setFechaRealizadaOpen] = useState(false)
@@ -107,7 +112,23 @@ export function MantenimientoForm({
         reporteUrl: mantenimiento.reporteUrl,
       })
       setSelectedEmpresaId(mantenimiento.equipo.empresa.id)
-    } else {
+    } else if (prefillData && open) {
+      form.reset({
+        equipoId: prefillData.equipoId || "",
+        tecnicoId: "",
+        tipo: "CORRECTIVO", // Por defecto correctivo si viene de una falla
+        estado: "PROGRAMADO",
+        fechaProgramada: new Date().toISOString().split('T')[0],
+        fechaRealizada: null,
+        descripcion: prefillData.descripcion || "",
+        observaciones: null,
+        reporteUrl: null,
+      })
+      const equipo = equipos.find(e => e.id === prefillData.equipoId)
+      if (equipo) {
+        setSelectedEmpresaId(equipo.empresaId)
+      }
+    } else if (open) {
       form.reset({
         equipoId: "",
         tecnicoId: "",
@@ -121,7 +142,7 @@ export function MantenimientoForm({
       })
       setSelectedEmpresaId(clienteEmpresaId || "")
     }
-  }, [mantenimiento, form, open, clienteEmpresaId])
+  }, [mantenimiento, form, open, clienteEmpresaId, prefillData, equipos])
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]

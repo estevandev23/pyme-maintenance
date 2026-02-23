@@ -145,9 +145,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
-    // Solo admin y cliente pueden crear mantenimientos
-    if (session.user.role === "TECNICO") {
-      return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
+    // Solo admin puede crear mantenimientos
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Sin permisos. Los clientes deben usar solicitudes de servicio." }, { status: 403 })
     }
 
     const body = await request.json()
@@ -171,12 +171,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Si es cliente, verificar que el equipo sea de su empresa
-    if (session.user.role === "CLIENTE" && session.user.empresaId) {
-      if (equipo.empresaId !== session.user.empresaId) {
-        return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
-      }
-    }
 
     // Verificar que el técnico existe y es técnico
     const tecnico = await prisma.user.findUnique({

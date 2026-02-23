@@ -13,6 +13,7 @@ import {
   Building2,
   Bell,
   History,
+  Ticket,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
@@ -23,6 +24,7 @@ const menuItems: { icon: any; label: string; href: string; badge?: boolean; role
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Building2, label: "Empresas", href: "/empresas", roles: ["ADMIN"] },
   { icon: Wrench, label: "Equipos", href: "/equipos", roles: ["ADMIN", "CLIENTE"] },
+  { icon: Ticket, label: "Solicitudes", href: "/solicitudes", roles: ["ADMIN", "CLIENTE"] },
   { icon: ClipboardList, label: "Mantenimientos", href: "/mantenimientos" },
   { icon: History, label: "Historial", href: "/historial" },
   { icon: Bell, label: "Alertas", href: "/alertas", badge: true },

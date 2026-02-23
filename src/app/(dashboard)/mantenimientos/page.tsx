@@ -68,9 +68,14 @@ function MantenimientosPageContent() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingMantenimiento, setEditingMantenimiento] = useState<Mantenimiento | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [prefillData, setPrefillData] = useState<{ equipoId?: string; descripcion?: string } | undefined>()
 
   // Filtro por ID desde URL (viene de alertas)
   const filterId = searchParams.get("id")
+  // Prefill desde solicitudes
+  const shouldCreate = searchParams.get("create") === "true"
+  const prefillEquipoId = searchParams.get("equipoId")
+  const prefillDesc = searchParams.get("descripcion")
 
   // Filtros
   const [filterEstado, setFilterEstado] = useState<string>("all")
@@ -94,7 +99,24 @@ function MantenimientosPageContent() {
       fetchTecnicos()
     }
     fetchMantenimientos()
-  }, [session])
+
+    // Manejar pre-llenado desde solicitudes
+    if (shouldCreate && prefillEquipoId) {
+      setPrefillData({
+        equipoId: prefillEquipoId,
+        descripcion: prefillDesc || "",
+      })
+      setFormOpen(true)
+      
+      // Limpiar URL para evitar re-apertura al recargar
+      const newParams = new URLSearchParams(searchParams.toString())
+      newParams.delete("create")
+      newParams.delete("equipoId")
+      newParams.delete("descripcion")
+      const newPath = `/mantenimientos${newParams.toString() ? `?${newParams.toString()}` : ""}`
+      window.history.replaceState(null, "", newPath)
+    }
+  }, [session, shouldCreate, prefillEquipoId, prefillDesc])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -251,10 +273,11 @@ function MantenimientosPageContent() {
     setFormOpen(open)
     if (!open) {
       setEditingMantenimiento(undefined)
+      setPrefillData(undefined)
     }
   }
 
-  const canCreate = session?.user?.role === "ADMIN" || session?.user?.role === "CLIENTE"
+  const canCreate = session?.user?.role === "ADMIN"
 
   const clearFilterId = () => {
     router.push("/mantenimientos")
@@ -516,6 +539,7 @@ function MantenimientosPageContent() {
 
       <MantenimientoForm
         mantenimiento={editingMantenimiento}
+        prefillData={prefillData}
         equipos={equipos}
         tecnicos={tecnicos}
         empresas={empresas}
