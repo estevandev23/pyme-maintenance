@@ -79,7 +79,7 @@ export function SolicitudForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg overflow-hidden">
         <DialogHeader>
           <DialogTitle>Reportar Problema</DialogTitle>
           <DialogDescription>
@@ -100,15 +100,16 @@ export function SolicitudForm({
                     value={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full truncate">
                         <SelectValue placeholder="Selecciona el equipo afectado" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent className="max-w-[var(--radix-select-trigger-width)]">
                       {equipos.length > 0 ? (
                         equipos.map((equipo) => (
-                          <SelectItem key={equipo.id} value={equipo.id}>
-                            {equipo.tipo} - {equipo.marca} {equipo.modelo || ""} (S/N: {equipo.serial})
+                          <SelectItem key={equipo.id} value={equipo.id} className="whitespace-normal">
+                            <span className="block text-sm font-medium">{equipo.tipo} - {equipo.marca} {equipo.modelo || ""}</span>
+                            <span className="block text-xs text-muted-foreground">S/N: {equipo.serial}</span>
                           </SelectItem>
                         ))
                       ) : (
