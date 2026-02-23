@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 interface SolicitudesTableProps {
   solicitudes: Solicitud[]
@@ -69,6 +70,7 @@ export function SolicitudesTable({
   userRole,
   onRefresh,
 }: SolicitudesTableProps) {
+  const router = useRouter()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [reviewSolicitud, setReviewSolicitud] = useState<Solicitud | null>(null)
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -96,13 +98,13 @@ export function SolicitudesTable({
     }
   }
 
-  const handleStatusChange = async (id: string, estado: string, respuestaText?: string) => {
+  const handleStatusChange = async (solicitud: Solicitud, estado: string, respuestaText?: string) => {
     try {
       setIsSubmitting(true)
       const body: any = { estado }
       if (respuestaText) body.respuesta = respuestaText
 
-      const response = await fetch(`/api/solicitudes/${id}`, {
+      const response = await fetch(`/api/solicitudes/${solicitud.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -118,6 +120,15 @@ export function SolicitudesTable({
       setReviewSolicitud(null)
       setRespuesta("")
       onRefresh()
+
+      // Si se aprueba, redirigir a crear mantenimiento
+      if (estado === "APROBADA") {
+        const params = new URLSearchParams()
+        params.append("equipoId", solicitud.equipoId)
+        params.append("descripcion", solicitud.descripcion)
+        params.append("create", "true")
+        router.push(`/mantenimientos?${params.toString()}`)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al actualizar")
     } finally {
@@ -243,7 +254,7 @@ export function SolicitudesTable({
                       {isAdmin && solicitud.estado === "PENDIENTE" && (
                         <>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleStatusChange(solicitud.id, "EN_REVISION")}>
+                          <DropdownMenuItem onClick={() => handleStatusChange(solicitud, "EN_REVISION")}>
                             <Clock className="mr-2 h-4 w-4" />
                             Marcar en revisión
                           </DropdownMenuItem>
@@ -399,13 +410,13 @@ export function SolicitudesTable({
                 </Button>
                 <Button
                   variant="destructive"
-                  onClick={() => handleStatusChange(reviewSolicitud.id, "RECHAZADA", respuesta || undefined)}
+                  onClick={() => handleStatusChange(reviewSolicitud, "RECHAZADA", respuesta || undefined)}
                   disabled={isSubmitting}
                 >
                   Rechazar
                 </Button>
                 <Button
-                  onClick={() => handleStatusChange(reviewSolicitud.id, "APROBADA", respuesta || undefined)}
+                  onClick={() => handleStatusChange(reviewSolicitud, "APROBADA", respuesta || undefined)}
                   disabled={isSubmitting}
                 >
                   Aprobar
