@@ -253,7 +253,7 @@ export default function MantenimientosPage() {
     }
   }
 
-  const canCreate = session?.user?.role === "ADMIN" || session?.user?.role === "CLIENTE"
+  const canCreate = session?.user?.role === "ADMIN"
 
   const clearFilterId = () => {
     router.push("/mantenimientos")

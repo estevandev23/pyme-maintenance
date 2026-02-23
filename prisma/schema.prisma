@@ -35,6 +35,20 @@ enum EstadoMantenimiento {
   CANCELADO
 }
 
+enum EstadoSolicitud {
+  PENDIENTE
+  EN_REVISION
+  APROBADA
+  RECHAZADA
+}
+
+enum PrioridadSolicitud {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
 model Empresa {
   id        String    @id @default(cuid())
   nombre    String
@@ -65,9 +79,10 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  empresa              Empresa?         @relation(fields: [empresaId], references: [id])
-  mantenimientos       Mantenimiento[]  @relation("TecnicoMantenimientos")
+  empresa              Empresa?              @relation(fields: [empresaId], references: [id])
+  mantenimientos       Mantenimiento[]       @relation("TecnicoMantenimientos")
   historial            Historial[]
+  solicitudes          SolicitudServicio[]   @relation("ClienteSolicitudes")
 
   @@map("users")
 }
@@ -84,9 +99,10 @@ model Equipo {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  empresa        Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresa        Empresa              @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   mantenimientos Mantenimiento[]
   historial      Historial[]
+  solicitudes    SolicitudServicio[]
 
   @@map("equipos")
 }
@@ -140,4 +156,21 @@ model Alerta {
   mantenimiento Mantenimiento @relation(fields: [mantenimientoId], references: [id], onDelete: Cascade)
 
   @@map("alertas")
+}
+
+model SolicitudServicio {
+  id          String              @id @default(cuid())
+  equipoId    String
+  clienteId   String
+  descripcion String              @db.Text
+  prioridad   PrioridadSolicitud  @default(MEDIA)
+  estado      EstadoSolicitud     @default(PENDIENTE)
+  respuesta   String?             @db.Text
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  equipo      Equipo              @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  cliente     User                @relation("ClienteSolicitudes", fields: [clienteId], references: [id])
+
+  @@map("solicitudes_servicio")
 }

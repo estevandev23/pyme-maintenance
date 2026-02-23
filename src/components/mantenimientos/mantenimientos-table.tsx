@@ -105,7 +105,7 @@ export function MantenimientosTable({
   const [cambiarEstadoActual, setCambiarEstadoActual] = useState<string>("")
   const [cambiarEstadoOpen, setCambiarEstadoOpen] = useState(false)
 
-  const canEdit = userRole === "ADMIN" || userRole === "CLIENTE"
+  const canEdit = userRole === "ADMIN"
   const canDelete = userRole === "ADMIN"
   const canChangeEstado = userRole === "TECNICO"
 
