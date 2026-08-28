@@ -269,18 +269,46 @@ export interface EstadisticasInforme {
   proximosMantenimientos: ProximoMantenimiento[]
 }
 
+export interface PartesDesviacion {
+  /** Siempre positiva: el signo lo comunica `sentido`. */
+  magnitud: number
+  /** "día" o "días", concordando con la magnitud. */
+  unidad: string
+  /** "de adelanto", "de retraso" o el caso sin desviación. */
+  sentido: string
+}
+
 /**
- * Cómo se lee la desviación respecto a la fecha programada. Un valor negativo
- * es un adelanto, no un tiempo de resolución negativo. Lo comparten pantalla y
- * archivos para que digan exactamente lo mismo.
+ * Descompone la desviación respecto a la fecha programada en sus partes.
+ *
+ * Un valor negativo es un adelanto, no un tiempo negativo. Se devuelven por
+ * separado para que quien las presente decida el tratamiento de cada una: la
+ * tarjeta del panel las compone con tipografías distintas, y los archivos
+ * exportados las unen en una frase.
  */
-export function etiquetaDesviacion(dias: number): string {
-  if (dias === 0) return "En la fecha programada"
+export function partesDesviacion(dias: number): PartesDesviacion {
   const magnitud = Math.abs(dias)
   const unidad = magnitud === 1 ? "día" : "días"
-  return dias > 0
-    ? `${magnitud} ${unidad} de retraso`
-    : `${magnitud} ${unidad} de adelanto`
+
+  if (dias === 0) {
+    return { magnitud: 0, unidad, sentido: "En la fecha programada" }
+  }
+
+  return {
+    magnitud,
+    unidad,
+    sentido: dias > 0 ? "de retraso" : "de adelanto",
+  }
+}
+
+/**
+ * La desviación como una sola frase. La usan los archivos exportados, donde no
+ * hay tipografías que distingan las partes.
+ */
+export function etiquetaDesviacion(dias: number): string {
+  const { magnitud, unidad, sentido } = partesDesviacion(dias)
+  if (dias === 0) return sentido
+  return `${magnitud} ${unidad} ${sentido}`
 }
 
 /** Rango legible fuera de la aplicación, para encabezados de archivos. */

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { format, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
+import type { DateRange } from "react-day-picker"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -37,7 +38,7 @@ import { cn } from "@/lib/utils"
 import { exportEstadisticasToExcel } from "@/lib/excel-export"
 import { exportEstadisticasToPDF } from "@/lib/pdf-export"
 import {
-  etiquetaDesviacion,
+  partesDesviacion,
   type EstadisticasInforme,
 } from "@/lib/estadisticas"
 
@@ -51,18 +52,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   // Selección del usuario. Mientras esté vacía manda el rango por defecto del
   // servidor, que es el que viaja de vuelta en `stats.rango`.
-  const [desde, setDesde] = useState<Date | undefined>()
-  const [hasta, setHasta] = useState<Date | undefined>()
-  const [desdeOpen, setDesdeOpen] = useState(false)
-  const [hastaOpen, setHastaOpen] = useState(false)
+  const [rango, setRango] = useState<DateRange | undefined>()
+  const [rangoAbierto, setRangoAbierto] = useState(false)
 
   const fetchStats = useCallback(async () => {
     try {
       setLoading(true)
 
       const params = new URLSearchParams()
-      if (desde) params.set("desde", aParametro(desde))
-      if (hasta) params.set("hasta", aParametro(hasta))
+      if (rango?.from) params.set("desde", aParametro(rango.from))
+      if (rango?.to) params.set("hasta", aParametro(rango.to))
       const query = params.toString()
 
       const response = await fetch(
@@ -88,7 +87,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [desde, hasta])
+  }, [rango])
 
   useEffect(() => {
     fetchStats()
@@ -130,17 +129,21 @@ export default function DashboardPage() {
 
   const rangoAplicado = stats?.rango
   const etiquetaPeriodo = rangoAplicado
-    ? `${format(parseISO(rangoAplicado.desde), "d 'de' MMMM yyyy", {
+    ? `${format(parseISO(rangoAplicado.desde), "d MMM yyyy", {
         locale: es,
-      })} — ${format(parseISO(rangoAplicado.hasta), "d 'de' MMMM yyyy", {
+      })} — ${format(parseISO(rangoAplicado.hasta), "d MMM yyyy", {
         locale: es,
       })}`
     : ""
 
-  const desdeSeleccionado =
-    desde ?? (rangoAplicado ? parseISO(rangoAplicado.desde) : undefined)
-  const hastaSeleccionado =
-    hasta ?? (rangoAplicado ? parseISO(rangoAplicado.hasta) : undefined)
+  const rangoMostrado: DateRange | undefined =
+    rango ??
+    (rangoAplicado
+      ? {
+          from: parseISO(rangoAplicado.desde),
+          to: parseISO(rangoAplicado.hasta),
+        }
+      : undefined)
 
   if (loading && !stats) {
     return (
@@ -174,85 +177,52 @@ export default function DashboardPage() {
     )
   }
 
+  const desviacion = partesDesviacion(stats.desviacionPromedioProgramacion)
+
   return (
     <>
       <Header title="Dashboard" description="Resumen general del sistema" />
 
       <div className="border-b border-border bg-card px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Desde</span>
-              <Popover open={desdeOpen} onOpenChange={setDesdeOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-[190px] justify-start text-left font-normal",
-                      !desdeSeleccionado && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {desdeSeleccionado
-                      ? format(desdeSeleccionado, "dd/MM/yyyy", { locale: es })
-                      : "Seleccionar"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={desdeSeleccionado}
-                    onSelect={(fecha) => {
-                      setDesde(fecha)
-                      setDesdeOpen(false)
-                    }}
-                    locale={es}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Un solo control: las dos fechas son un periodo, no dos datos
+                sueltos. */}
+            <Popover open={rangoAbierto} onOpenChange={setRangoAbierto}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "justify-start text-left font-normal",
+                    !rangoMostrado && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                  {etiquetaPeriodo || "Seleccionar periodo"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  numberOfMonths={2}
+                  defaultMonth={rangoMostrado?.from}
+                  selected={rangoMostrado}
+                  onSelect={setRango}
+                  locale={es}
+                />
+              </PopoverContent>
+            </Popover>
 
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Hasta</span>
-              <Popover open={hastaOpen} onOpenChange={setHastaOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-[190px] justify-start text-left font-normal",
-                      !hastaSeleccionado && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {hastaSeleccionado
-                      ? format(hastaSeleccionado, "dd/MM/yyyy", { locale: es })
-                      : "Seleccionar"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={hastaSeleccionado}
-                    onSelect={(fecha) => {
-                      setHasta(fecha)
-                      setHastaOpen(false)
-                    }}
-                    locale={es}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {(desde || hasta) && (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setDesde(undefined)
-                  setHasta(undefined)
-                }}
-              >
+            {rango && (
+              <Button variant="ghost" onClick={() => setRango(undefined)}>
                 Restablecer
               </Button>
+            )}
+
+            {loading && (
+              <span className="text-sm text-muted-foreground">
+                actualizando...
+              </span>
             )}
           </div>
 
@@ -275,55 +245,29 @@ export default function DashboardPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-
-        {/* El periodo representado siempre a la vista: sin él las cifras no
-            dicen a qué corresponden. */}
-        <p className="mt-3 text-sm text-muted-foreground">
-          Periodo del informe:{" "}
-          <span className="font-medium">{etiquetaPeriodo}</span>
-          {loading && " · actualizando..."}
-        </p>
       </div>
 
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
-          {/* Metric Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {/* @container: la rejilla decide sus columnas por el ancho del que
+            dispone, no por el de la ventana. Sin esto, ensanchar la pantalla
+            reducía el espacio por tarjeta al aparecer la barra lateral y al
+            saltar a seis columnas. */}
+        <div className="@container mx-auto max-w-7xl space-y-6">
+          {/* Destacados: responden cómo vamos */}
+          <div className="grid gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
             <MetricCard
-              title="Total Equipos"
-              value={stats.totalEquipos.toString()}
-              change={`${stats.equiposPorEstado.ACTIVO || 0} activos`}
-              trend="up"
-              icon={Wrench}
-            />
-            <MetricCard
-              title="Pendientes"
-              value={stats.mantenimientosPendientes.toString()}
-              change={`${stats.cambioPendientes > 0 ? "+" : ""}${stats.cambioPendientes}%`}
-              trend={stats.cambioPendientes > 0 ? "up" : "down"}
-              icon={ClipboardList}
-            />
-            <MetricCard
-              title="Completados (Periodo)"
-              value={stats.completadosPeriodo.toString()}
-              change={`${stats.cambioCompletados > 0 ? "+" : ""}${stats.cambioCompletados}%`}
-              trend={stats.cambioCompletados > 0 ? "up" : "down"}
+              title="Completados en el periodo"
+              value={stats.completadosPeriodo}
+              hint={`${stats.cambioCompletados > 0 ? "+" : ""}${stats.cambioCompletados}% vs. periodo anterior`}
+              trend={stats.cambioCompletados >= 0 ? "up" : "down"}
               icon={BarChart3}
             />
             <MetricCard
-              title="Equipos Críticos"
-              value={stats.equiposCriticos.toString()}
-              change={stats.equiposCriticos > 0 ? "Requieren atención" : "Todo bien"}
-              trend={stats.equiposCriticos > 0 ? "critical" : "down"}
-              icon={Bell}
-            />
-            {/* Mide la diferencia con la fecha programada, no el tiempo de
-                resolución de una solicitud. El rótulo lo dice para que nadie lo
-                lea como otra cosa. */}
-            <MetricCard
-              title="Desviación vs. Programado"
-              value={etiquetaDesviacion(stats.desviacionPromedioProgramacion)}
-              change="Respecto a la fecha programada"
+              title="Desviación respecto a lo programado"
+              value={desviacion.magnitud}
+              unit={desviacion.unidad}
+              hint={desviacion.sentido}
+              decimals={1}
               trend={
                 stats.desviacionPromedioProgramacion <= 0
                   ? "up"
@@ -334,21 +278,57 @@ export default function DashboardPage() {
               icon={Clock}
             />
             <MetricCard
-              title="Fallas Recurrentes"
-              value={stats.fallasRecurrentes.length.toString()}
-              change={stats.fallasRecurrentes.length > 0 ? "Equipos con +2 fallas" : "Sin fallas recurrentes"}
+              title="Equipos con fallas recurrentes"
+              value={stats.fallasRecurrentes.length}
+              hint={
+                stats.fallasRecurrentes.length > 0
+                  ? "con 2 o más correctivos"
+                  : "sin fallas recurrentes"
+              }
               trend={stats.fallasRecurrentes.length > 0 ? "critical" : "up"}
               icon={AlertTriangle}
+            />
+          </div>
+
+          {/* Contexto: sitúan, no accionan */}
+          <div className="grid gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
+            <MetricCard
+              title="Total de equipos"
+              value={stats.totalEquipos}
+              hint={`${stats.equiposPorEstado.ACTIVO || 0} activos`}
+              trend="up"
+              icon={Wrench}
+              variant="contexto"
+            />
+            <MetricCard
+              title="Mantenimientos pendientes"
+              value={stats.mantenimientosPendientes}
+              hint={`${stats.cambioPendientes > 0 ? "+" : ""}${stats.cambioPendientes}% vs. periodo anterior`}
+              trend={stats.cambioPendientes > 0 ? "up" : "down"}
+              icon={ClipboardList}
+              variant="contexto"
+            />
+            <MetricCard
+              title="Equipos críticos"
+              value={stats.equiposCriticos}
+              hint={
+                stats.equiposCriticos > 0 ? "requieren atención" : "todo bien"
+              }
+              trend={stats.equiposCriticos > 0 ? "critical" : "down"}
+              icon={Bell}
+              variant="contexto"
             />
           </div>
 
           {/* Chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-foreground">Mantenimientos por Mes</CardTitle>
+              <CardTitle className="text-foreground">
+                Mantenimientos por mes
+              </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Mantenimientos preventivos y correctivos · {etiquetaPeriodo} ·
-                total del periodo: {stats.totalMantenimientos}
+                Preventivos y correctivos · {etiquetaPeriodo} · total del
+                periodo: {stats.totalMantenimientos.toLocaleString("es")}
               </p>
             </CardHeader>
             <CardContent>
@@ -357,12 +337,16 @@ export default function DashboardPage() {
           </Card>
 
           {/* Two column layout for tables */}
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 @4xl:grid-cols-2">
             {/* Recent Maintenance Table */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-foreground">Próximos Mantenimientos</CardTitle>
-                <p className="text-sm text-muted-foreground">Mantenimientos programados y en proceso</p>
+                <CardTitle className="text-foreground">
+                  Próximos mantenimientos
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Programados y en proceso
+                </p>
               </CardHeader>
               <CardContent>
                 <MaintenanceTable
@@ -380,9 +364,11 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-destructive" />
-                  Fallas Recurrentes por Equipo
+                  Fallas recurrentes por equipo
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">Equipos con 2 o más mantenimientos correctivos en el periodo</p>
+                <p className="text-sm text-muted-foreground">
+                  Equipos con 2 o más mantenimientos correctivos en el periodo
+                </p>
               </CardHeader>
               <CardContent>
                 {stats.fallasRecurrentes.length === 0 ? (
@@ -394,21 +380,21 @@ export default function DashboardPage() {
                     {stats.fallasRecurrentes.map((falla) => (
                       <div
                         key={falla.equipoId}
-                        className="flex items-center justify-between rounded-lg border border-border bg-card p-3"
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
                       >
-                        <div className="space-y-1">
+                        <div className="min-w-0 space-y-1">
                           <p className="font-medium text-foreground">
-                            {falla.equipo?.tipo} {falla.equipo?.marca} {falla.equipo?.modelo || ""}
+                            {falla.equipo?.tipo} {falla.equipo?.marca}{" "}
+                            {falla.equipo?.modelo || ""}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Serial: {falla.equipo?.serial} | {falla.equipo?.empresa}
+                            Serial: {falla.equipo?.serial} |{" "}
+                            {falla.equipo?.empresa}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-destructive/10 px-3 py-1 text-sm font-semibold text-destructive">
-                            {falla.cantidadFallas} fallas
-                          </span>
-                        </div>
+                        <span className="shrink-0 rounded-full bg-destructive/10 px-3 py-1 text-sm font-semibold tabular-nums text-destructive">
+                          {falla.cantidadFallas} fallas
+                        </span>
                       </div>
                     ))}
                   </div>
