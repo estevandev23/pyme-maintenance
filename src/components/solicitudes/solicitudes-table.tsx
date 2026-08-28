@@ -4,6 +4,7 @@ import { useState } from "react"
 import { MoreHorizontal, Ticket, Eye, X, CheckCircle, XCircle, Clock } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import type { LucideIcon } from "lucide-react"
 import type { Solicitud } from "@/types/solicitud"
 import {
   Table,
@@ -51,7 +52,7 @@ interface SolicitudesTableProps {
   onRefresh: () => void
 }
 
-const estadoConfig: Record<string, { label: string; color: string; icon: any }> = {
+const estadoConfig: Record<string, { label: string; color: string; icon: LucideIcon }> = {
   PENDIENTE: { label: "Pendiente", color: "bg-yellow-500/10 text-yellow-700 border-yellow-200", icon: Clock },
   EN_REVISION: { label: "En Revisión", color: "bg-blue-500/10 text-blue-700 border-blue-200", icon: Eye },
   APROBADA: { label: "Aprobada", color: "bg-green-500/10 text-green-700 border-green-200", icon: CheckCircle },
@@ -101,7 +102,7 @@ export function SolicitudesTable({
   const handleStatusChange = async (solicitud: Solicitud, estado: string, respuestaText?: string) => {
     try {
       setIsSubmitting(true)
-      const body: any = { estado }
+      const body: { estado: string; respuesta?: string } = { estado }
       if (respuestaText) body.respuesta = respuestaText
 
       const response = await fetch(`/api/solicitudes/${solicitud.id}`, {

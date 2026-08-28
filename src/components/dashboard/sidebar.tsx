@@ -15,12 +15,13 @@ import {
   History,
   Ticket,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
 
 type Role = "ADMIN" | "TECNICO" | "CLIENTE"
 
-const menuItems: { icon: any; label: string; href: string; badge?: boolean; roles?: Role[] }[] = [
+const menuItems: { icon: LucideIcon; label: string; href: string; badge?: boolean; roles?: Role[] }[] = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Building2, label: "Empresas", href: "/empresas", roles: ["ADMIN"] },
   { icon: Wrench, label: "Equipos", href: "/equipos", roles: ["ADMIN", "CLIENTE"] },

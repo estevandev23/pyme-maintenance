@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { createUserSchema, updateUserSchema, type CreateUserInput } from "@/lib/validations/user"
 import { Button } from "@/components/ui/button"
@@ -46,7 +46,7 @@ interface UsuarioFormProps {
   empresas: Array<{ id: string; nombre: string }>
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: any) => Promise<void>
+  onSubmit: (data: CreateUserInput) => Promise<void>
   isLoading?: boolean
 }
 
@@ -82,7 +82,12 @@ export function UsuarioForm({
   const isEditing = !!usuario
 
   const form = useForm<CreateUserInput>({
-    resolver: zodResolver(isEditing ? updateUserSchema : createUserSchema),
+    // Al editar, el esquema deja todos los campos opcionales, así que su
+    // resolver no coincide con el del formulario. Validan la misma forma, de
+    // modo que se le indica al compilador cuál de las dos rige aquí.
+    resolver: zodResolver(
+      isEditing ? updateUserSchema : createUserSchema
+    ) as unknown as Resolver<CreateUserInput>,
     defaultValues: {
       email: "",
       nombre: "",
@@ -123,7 +128,7 @@ export function UsuarioForm({
     form.setValue("password", newPassword)
   }
 
-  const handleSubmit = async (data: any) => {
+  const handleSubmit = async (data: CreateUserInput) => {
     await onSubmit(data)
     form.reset()
   }

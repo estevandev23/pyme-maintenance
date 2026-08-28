@@ -168,7 +168,7 @@ export default function UsuariosPage() {
     setFormOpen(true)
   }
 
-  const handleUpdate = async (data: any) => {
+  const handleUpdate = async (data: CreateUserInput) => {
     if (!editingUsuario) return
 
     try {

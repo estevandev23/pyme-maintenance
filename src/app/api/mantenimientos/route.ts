@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma, type EstadoMantenimiento, type TipoMantenimiento } from "@prisma/client"
 import { mantenimientoSchema } from "@/lib/validations/mantenimiento"
 import {
   AsignacionError,
@@ -29,12 +30,12 @@ export async function GET(request: NextRequest) {
     const pageParam = searchParams.get("page")
     const limitParam = searchParams.get("limit")
 
-    const andFilters: any[] = []
+    const andFilters: Prisma.MantenimientoWhereInput[] = []
 
     // Filtro por ID específico (desde alertas)
     if (id) andFilters.push({ id })
-    if (estado) andFilters.push({ estado })
-    if (tipo) andFilters.push({ tipo })
+    if (estado) andFilters.push({ estado: estado as EstadoMantenimiento })
+    if (tipo) andFilters.push({ tipo: tipo as TipoMantenimiento })
     if (tecnicoId) andFilters.push({ tecnicoId })
     if (equipoId) andFilters.push({ equipoId })
 

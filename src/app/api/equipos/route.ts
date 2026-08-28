@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma, type EstadoEquipo } from "@prisma/client"
 import { equipoSchema } from "@/lib/validations/equipo"
 
 // GET /api/equipos - Listar todos los equipos
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     const pageParam = searchParams.get("page")
     const limitParam = searchParams.get("limit")
 
-    const andFilters: any[] = []
+    const andFilters: Prisma.EquipoWhereInput[] = []
 
     // Filtro por ID específico (desde alertas)
     if (id) {
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     // Filtrar por estado si se proporciona
     if (estado) {
-      andFilters.push({ estado })
+      andFilters.push({ estado: estado as EstadoEquipo })
     }
 
     // Búsqueda multi-término por tipo, marca, serial o modelo
