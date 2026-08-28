@@ -1,13 +1,13 @@
 ## 1. Preparación
 
-- [ ] 1.1 Confirmar que el árbol de trabajo está limpio y crear una rama propia
+- [x] 1.1 Confirmar que el árbol de trabajo está limpio y crear una rama propia
       para la migración. Verificar con `git status` que no hay cambios sin
       confirmar que puedan mezclarse con el diff del codemod.
-- [ ] 1.2 Dejar registrado el estado visual de partida de las pantallas que más
+- [x] 1.2 Dejar registrado el estado visual de partida de las pantallas que más
       componentes usan (panel, mantenimientos, formulario de mantenimiento con
       su selector de fechas, usuarios) para poder comparar después. Verificar que
       hay una referencia de cada una antes de tocar nada.
-- [ ] 1.3 Registrar el inventario de riesgos de deriva: listar las apariciones de
+- [x] 1.3 Registrar el inventario de riesgos de deriva: listar las apariciones de
       `border` sin color explícito al lado, y las de `shadow-sm`, `shadow-lg`,
       `blur-sm`, `outline-none` y `rounded` sin sufijo. Verificar que la lista
       distingue las que ya llevan color de las que no.
