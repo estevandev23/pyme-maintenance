@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   darkMode: ["class"],
@@ -58,6 +59,13 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    // Los componentes de ui/ marcan los campos inválidos con clases
+    // aria-invalid:*, una variante que Tailwind v3 no genera por defecto.
+    plugin(({ addVariant }) => {
+      addVariant("aria-invalid", '&[aria-invalid="true"]');
+    }),
+  ],
 };
 export default config;
