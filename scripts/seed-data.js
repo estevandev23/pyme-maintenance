@@ -1,17 +1,41 @@
+// bcryptjs, el mismo que usa la aplicación para verificar la contraseña.
 const { PrismaClient } = require('@prisma/client')
-const bcrypt = require('bcrypt')
+const bcrypt = require('bcryptjs')
 
 const prisma = new PrismaClient()
+
+/** NIT de las empresas que crea este script. Solo se borra lo que cuelga de ellas. */
+const NITS_SEMILLA = ['900123456-1', '900234567-2', '900345678-3', '900456789-4']
 
 async function main() {
   console.log('🌱 Iniciando seed de la base de datos...')
 
-  // Limpiar datos existentes (opcional, comentar si no quieres borrar)
-  // await prisma.historial.deleteMany()
-  // await prisma.mantenimiento.deleteMany()
-  // await prisma.equipo.deleteMany()
-  // await prisma.user.deleteMany()
-  // await prisma.empresa.deleteMany()
+  // Borrar lo sembrado en ejecuciones anteriores, para que volver a ejecutar no
+  // duplique equipos ni mantenimientos. Se limita a las empresas de este script:
+  // los datos creados a mano desde la aplicación no se tocan.
+  console.log('🧹 Limpiando lo sembrado anteriormente...')
+  const empresasPrevias = await prisma.empresa.findMany({
+    where: { nit: { in: NITS_SEMILLA } },
+    select: { id: true },
+  })
+  const idsPrevios = empresasPrevias.map((e) => e.id)
+
+  if (idsPrevios.length > 0) {
+    const equiposPrevios = await prisma.equipo.findMany({
+      where: { empresaId: { in: idsPrevios } },
+      select: { id: true },
+    })
+    const equipoIds = equiposPrevios.map((e) => e.id)
+
+    await prisma.historial.deleteMany({ where: { equipoId: { in: equipoIds } } })
+    await prisma.alerta.deleteMany({
+      where: { mantenimiento: { equipoId: { in: equipoIds } } },
+    })
+    await prisma.solicitudServicio.deleteMany({ where: { equipoId: { in: equipoIds } } })
+    await prisma.mantenimiento.deleteMany({ where: { equipoId: { in: equipoIds } } })
+    await prisma.equipo.deleteMany({ where: { id: { in: equipoIds } } })
+    console.log(`   ${equipoIds.length} equipos anteriores retirados con lo que colgaba de ellos`)
+  }
 
   // Crear empresas
   console.log('📦 Creando empresas...')
@@ -84,41 +108,53 @@ async function main() {
     },
   })
 
-  const tecnicos = await Promise.all([
-    prisma.user.upsert({
-      where: { email: 'tecnico1@mantenpro.com' },
-      update: {},
-      create: {
-        email: 'tecnico1@mantenpro.com',
-        password: hashedPassword,
-        nombre: 'Pedro Ramírez',
-        role: 'TECNICO',
-        activo: true,
-      },
-    }),
-    prisma.user.upsert({
-      where: { email: 'tecnico2@mantenpro.com' },
-      update: {},
-      create: {
-        email: 'tecnico2@mantenpro.com',
-        password: hashedPassword,
-        nombre: 'Ana García',
-        role: 'TECNICO',
-        activo: true,
-      },
-    }),
-    prisma.user.upsert({
-      where: { email: 'tecnico3@mantenpro.com' },
-      update: {},
-      create: {
-        email: 'tecnico3@mantenpro.com',
-        password: hashedPassword,
-        nombre: 'Luis Torres',
-        role: 'TECNICO',
-        activo: true,
-      },
-    }),
-  ])
+  // Un técnico pertenece a una sola empresa, y el reparto de trabajo se hace
+  // entre los de la empresa del equipo. Se crean dos por empresa para que ese
+  // reparto por menor carga tenga entre quién elegir.
+  const tecnicosSemilla = [
+    { email: 'tecnico1@mantenpro.com', nombre: 'Pedro Ramírez', empresa: 0 },
+    { email: 'tecnico2@mantenpro.com', nombre: 'Ana García', empresa: 0 },
+    { email: 'tecnico3@mantenpro.com', nombre: 'Luis Torres', empresa: 1 },
+    { email: 'tecnico4@mantenpro.com', nombre: 'Marta Ruiz', empresa: 1 },
+    { email: 'tecnico5@mantenpro.com', nombre: 'Jorge Peña', empresa: 2 },
+    { email: 'tecnico6@mantenpro.com', nombre: 'Elena Vargas', empresa: 2 },
+    { email: 'tecnico7@mantenpro.com', nombre: 'Iván Duarte', empresa: 3 },
+    { email: 'tecnico8@mantenpro.com', nombre: 'Rocío Nieto', empresa: 3 },
+  ]
+
+  const tecnicos = await Promise.all(
+    tecnicosSemilla.map((t) =>
+      prisma.user.upsert({
+        where: { email: t.email },
+        // El update repara ejecuciones anteriores que dejaron al técnico sin
+        // empresa, situación que el rol no admite.
+        update: { empresaId: empresas[t.empresa].id, activo: true },
+        create: {
+          email: t.email,
+          password: hashedPassword,
+          nombre: t.nombre,
+          role: 'TECNICO',
+          empresaId: empresas[t.empresa].id,
+          activo: true,
+        },
+      })
+    )
+  )
+
+  /** Técnicos agrupados por empresa, para no asignar trabajo fuera de la suya. */
+  const tecnicosPorEmpresa = new Map()
+  for (const tecnico of tecnicos) {
+    const lista = tecnicosPorEmpresa.get(tecnico.empresaId) || []
+    lista.push(tecnico)
+    tecnicosPorEmpresa.set(tecnico.empresaId, lista)
+  }
+
+  /** Elige un técnico de la empresa del equipo, repartiendo de forma pareja. */
+  let turnoTecnico = 0
+  const tecnicoPara = (equipo) => {
+    const candidatos = tecnicosPorEmpresa.get(equipo.empresaId) || []
+    return candidatos[turnoTecnico++ % candidatos.length]
+  }
 
   const clientes = await Promise.all([
     prisma.user.upsert({
@@ -173,7 +209,7 @@ async function main() {
 
   console.log(`✅ ${1 + tecnicos.length + clientes.length} usuarios creados`)
   console.log('   - Usuario: admin@mantenpro.com / password123')
-  console.log('   - Técnicos: tecnico1@mantenpro.com, tecnico2@mantenpro.com, tecnico3@mantenpro.com / password123')
+  console.log(`   - Técnicos: tecnico1..${tecnicos.length}@mantenpro.com / password123 (dos por empresa)`)
   console.log('   - Clientes: cliente1@techsolutions.com, cliente2@innovatech.com, etc. / password123')
 
   // Crear equipos
@@ -218,7 +254,7 @@ async function main() {
   const hoy = new Date()
   for (let i = 0; i < 40; i++) {
     const equipo = equipos[Math.floor(Math.random() * equipos.length)]
-    const tecnico = tecnicos[Math.floor(Math.random() * tecnicos.length)]
+    const tecnico = tecnicoPara(equipo)
     const tipo = tipos[Math.floor(Math.random() * tipos.length)]
     const estado = 'COMPLETADO'
 
@@ -228,7 +264,8 @@ async function main() {
     fechaProgramada.setDate(fechaProgramada.getDate() - diasAtras)
 
     const fechaRealizada = new Date(fechaProgramada)
-    fechaRealizada.setDate(fechaRealizada.getDate() + Math.floor(Math.random() * 3))
+    // De -2 a +3 días: hay trabajos adelantados y atrasados, no solo atrasados.
+    fechaRealizada.setDate(fechaRealizada.getDate() + Math.floor(Math.random() * 6) - 2)
 
     const mantenimiento = await prisma.mantenimiento.create({
       data: {
@@ -262,7 +299,7 @@ async function main() {
   // Mantenimientos futuros y en proceso
   for (let i = 0; i < 30; i++) {
     const equipo = equipos[Math.floor(Math.random() * equipos.length)]
-    const tecnico = tecnicos[Math.floor(Math.random() * tecnicos.length)]
+    const tecnico = tecnicoPara(equipo)
     const tipo = tipos[Math.floor(Math.random() * tipos.length)]
     const estado = estadosMantenimiento[Math.floor(Math.random() * estadosMantenimiento.length)]
 
