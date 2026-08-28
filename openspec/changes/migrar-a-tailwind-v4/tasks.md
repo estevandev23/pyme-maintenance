@@ -53,7 +53,7 @@
 - [x] 4.3 Comprobar en el CSS compilado que las clases que antes desaparecían
       ahora se emiten: `shadow-xs`, `outline-hidden` y las de tamaño por
       variable. Verificar que un elemento con `shadow-xs` tiene sombra real.
-- [ ] 4.4 Verificar el selector de fechas: celdas de día del mismo tamaño, fila
+- [x] 4.4 Verificar el selector de fechas: celdas de día del mismo tamaño, fila
       de nombres de día alineada con la rejilla, y botones de navegación con área
       propia.
 
@@ -72,10 +72,10 @@
 
 ## 6. Verificación integral
 
-- [ ] 6.1 Comparar cada pantalla capturada en la tarea 1.2 con su estado tras la
+- [x] 6.1 Comparar cada pantalla capturada en la tarea 1.2 con su estado tras la
       migración. Verificar que toda diferencia corresponde a un cambio declarado
       en la propuesta y no a una regresión.
-- [ ] 6.2 Recorrer los formularios que usan los componentes afectados (diálogo de
+- [x] 6.2 Recorrer los formularios que usan los componentes afectados (diálogo de
       mantenimiento, alta de usuario, solicitudes) comprobando estados de foco,
       error y deshabilitado. Verificar que el contorno de foco es el del sistema
       de diseño y no el del navegador.

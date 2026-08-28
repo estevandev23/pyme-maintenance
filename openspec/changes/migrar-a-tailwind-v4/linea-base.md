@@ -101,8 +101,51 @@ en el recuento de clases del código fuente.
 Pocas y localizadas: `shadow-sm` (1), `shadow-lg` (1), `blur-sm` (1),
 `outline-none` (2) y `rounded` sin sufijo (3).
 
-## Cómo comparar al terminar
+## Resultado de la comparación, ya con v4
 
-Repetir la misma medición sobre la aplicación ya migrada y contrastar tabla
-contra tabla. Toda diferencia debe corresponder a un cambio declarado en
-`proposal.md`; cualquier otra es una regresión.
+Repetida la misma medición sobre la aplicación migrada: **14 de 15 valores
+idénticos**. Bordes, radios, colores, tamaños y espaciados no se movieron.
+
+### La única diferencia
+
+| Clase | v3 | v4 |
+|---|---|---|
+| `shadow-sm` | `0 1px 2px rgba(0,0,0,.05)` | `0 1px 3px rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1)` |
+
+Es el desplazamiento de escala declarado en la propuesta: el `shadow-sm` de v4
+equivale al `shadow` de v3. **No afecta a ningún elemento**, porque fuera de
+`src/components/ui/` no queda ningún uso de `shadow-sm` (el codemod los
+convirtió) y los cinco de dentro son código escrito para v4, que ya pretendía
+este valor.
+
+### Lo que antes no producía nada, ahora sí
+
+| Clase | Antes | Ahora |
+|---|---|---|
+| `shadow-xs` | `box-shadow: none` | `0 1px 2px rgba(0,0,0,.05)` — la sombra sutil que v3 llamaba `shadow-sm` |
+| `outline-hidden` | sin efecto | `outline-style: none` |
+| `animate-in` | sin efecto | `animation-name: enter` |
+
+### El calendario, que era el objetivo
+
+| Utilidad | Antes | Ahora |
+|---|---|---|
+| `--cell-size` | `--spacing(8)`, valor inválido | `calc(0.25rem * 8)` = **32px** |
+| `size-(--cell-size)` | regla no emitida | 32 x 32 px |
+| `w-(--cell-size)` | regla no emitida | 32 px |
+| `h-(--cell-size)` | regla no emitida | 32 px |
+| `min-w-(--cell-size)` | regla no emitida | 32 px |
+
+Las cuatro utilidades que dimensionan celdas, cabecera y botones de navegación
+resuelven ahora al mismo valor, que es lo que hacía falta para que la rejilla
+quedara cuadrada.
+
+### Estados de formulario
+
+| Caso | Resultado |
+|---|---|
+| `aria-invalid` en un input | el borde pasa a `rgb(239, 68, 68)` |
+| `disabled` en un botón | opacidad 1 → 0.5 |
+
+La variante `aria-invalid` funciona **sin el plugin** que hubo que añadir a mano
+con v3: en v4 es nativa.
