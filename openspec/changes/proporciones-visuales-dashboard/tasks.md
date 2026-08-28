@@ -71,12 +71,12 @@
 
 ## 7. Verificación integral
 
-- [ ] 7.1 Comparar el panel con la referencia de la tarea 1.2 a 1280px.
+- [x] 7.1 Comparar el panel con la referencia de la tarea 1.2 a 1280px.
       Verificar que la cifra de cada indicador cabe en una línea.
-- [ ] 7.2 Recorrer los anchos 1024, 1280, 1536 y 1920 comprobando que la
+- [x] 7.2 Recorrer los anchos 1024, 1280, 1536 y 1920 comprobando que la
       composición aguanta en todos. Verificar que en ninguno hay desbordamiento
       ni texto partido de forma extraña.
-- [ ] 7.3 Comprobar que las dos filas no dejan el gráfico fuera de la vista
+- [x] 7.3 Comprobar que las dos filas no dejan el gráfico fuera de la vista
       inicial a una altura de ventana habitual. Verificar a 1280x800.
 - [x] 7.4 Ejecutar la suite y el linter, dejando constancia de que ninguno de los
       dos detecta regresiones visuales: la verificación de este cambio es visual
