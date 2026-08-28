@@ -76,5 +76,5 @@
       ve en pantalla.
 - [x] 6.3 Verificar que ampliar el rango al histórico completo no expone a un
       cliente datos de otras empresas.
-- [ ] 6.4 Ejecutar `npm test` y `npm run lint` y verificar que ambos terminan sin
+- [x] 6.4 Ejecutar `npm test` y `npm run lint` y verificar que ambos terminan sin
       errores.
