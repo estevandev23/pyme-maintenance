@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { decidirCambioDeEquipo } from "@/lib/edicion-mantenimiento"
 import { Prisma } from "@prisma/client"
 import { updateMantenimientoSchema, cambiarEstadoSchema } from "@/lib/validations/mantenimiento"
 import {
@@ -215,6 +216,17 @@ export async function PUT(
 
     // ADMIN y CLIENTE: edición completa
     const validatedData = updateMantenimientoSchema.parse(body)
+
+    // El equipo se fija al crear el mantenimiento. Se comprueba antes de abrir
+    // la transacción para que un rechazo no deje nada a medias.
+    const decision = decidirCambioDeEquipo(
+      validatedData.equipoId,
+      existingMantenimiento.equipoId
+    )
+
+    if (!decision.permitida) {
+      return NextResponse.json({ error: decision.motivo }, { status: 400 })
+    }
 
     // Preparar datos para actualizar
     const updateData: Prisma.MantenimientoUncheckedUpdateInput = {}
