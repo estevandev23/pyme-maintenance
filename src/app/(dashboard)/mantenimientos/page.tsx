@@ -368,9 +368,9 @@ function MantenimientosPageContent() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <Button
-                variant={filterAlerta ? "default" : "outline"}
+                variant={filterAlerta ? "default" : "outline-solid"}
                 size="sm"
                 onClick={() => setFilterAlerta(!filterAlerta)}
                 className={filterAlerta ? "bg-red-500 hover:bg-red-600" : ""}

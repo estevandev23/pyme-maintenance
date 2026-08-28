@@ -104,7 +104,7 @@ export function SolicitudForm({
                         <SelectValue placeholder="Selecciona el equipo afectado" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent className="max-w-[var(--radix-select-trigger-width)]">
+                    <SelectContent className="max-w-(--radix-select-trigger-width)">
                       {equipos.length > 0 ? (
                         equipos.map((equipo) => (
                           <SelectItem key={equipo.id} value={equipo.id} className="whitespace-normal">

@@ -61,25 +61,40 @@ selector de fechas se descuadre.
 
 ## Inventario de deriva: `border` sin color explícito
 
-En v4 el color por defecto de un borde pasa de gris a `currentColor`. Recuento
-sobre literales de clase en `src/`:
+> **Corrección posterior a la migración.** Este riesgo resultó no existir, y el
+> análisis de partida era erróneo. Se conserva junto con su corrección porque el
+> motivo del error es útil.
+
+El recuento sobre literales de clase en `src/` fue:
 
 ```
   border CON color en el mismo literal : 25
-  border SIN color en el mismo literal : 22   <-- cambian de color
+  border SIN color en el mismo literal : 22
 ```
 
-Los 22 se concentran en unos pocos patrones repetidos:
+De ahí se concluyó que esos 22 cambiarían de color en v4, al pasar el color por
+defecto de gris a `currentColor`. **La conclusión era falsa.**
 
-| Patrón | Dónde |
-|---|---|
-| `rounded-md border` | contenedores de tabla: empresas, equipos, mantenimientos, solicitudes |
-| `rounded-md border p-4 w-[320px]` | popovers del formulario de mantenimiento |
-| `... rounded-lg border bg-popover` | desplegable del historial |
-| `p-3 border rounded-lg bg-muted/50` | bloque de archivo adjunto |
+El error estuvo en mirar solo los literales de clase e ignorar la hoja de
+estilos. `globals.css` ya contenía, y sigue conteniendo:
 
-Al ser tan repetitivos, la corrección es casi mecánica: añadir `border-border`
-donde falta.
+```css
+@layer base {
+  * { @apply border-border; }
+}
+```
+
+Es decir, **todos** los bordes del proyecto ya tomaban su color del token de
+diseño, no del valor por defecto de Tailwind. Se confirma con la propia línea
+base: `border` medía `rgb(229, 229, 229)`, que es `--border: 0 0% 89.8%`, y no
+el `gray-200` de Tailwind, que es `rgb(229, 231, 235)`. Dos grises casi
+idénticos a ojo, distintos en el número.
+
+Consecuencia práctica: el parche de compatibilidad que el codemod añadió para
+este caso quedaba siempre sobrescrito por esa regla, así que se retiró.
+
+La lección es la del propio cambio: la respuesta estaba en el CSS compilado, no
+en el recuento de clases del código fuente.
 
 ## Otras clases renombradas, fuera de `src/components/ui/`
 

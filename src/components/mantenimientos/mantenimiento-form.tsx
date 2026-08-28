@@ -302,7 +302,7 @@ export function MantenimientoForm({
                       <SelectContent className="max-w-[min(calc(100vw-2rem),500px)]">
                         {filteredEquipos.map((equipo) => (
                           <SelectItem key={equipo.id} value={equipo.id}>
-                            <span className="whitespace-normal break-words">
+                            <span className="whitespace-normal wrap-break-word">
                               {equipo.tipo} - {equipo.marca} {equipo.modelo || ""} (S/N: {equipo.serial})
                             </span>
                           </SelectItem>

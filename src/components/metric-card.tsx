@@ -30,7 +30,7 @@ export function MetricCard({ title, value, change, trend, icon: Icon }: MetricCa
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground min-h-[2.5rem] flex items-center">{title}</p>
+            <p className="text-sm font-medium text-muted-foreground min-h-10 flex items-center">{title}</p>
             <div className="flex items-baseline gap-2 flex-wrap">
               <h3 className="text-3xl font-bold text-foreground">{value}</h3>
               <div className={`flex items-center gap-1 text-sm font-medium ${getTrendColor()}`}>

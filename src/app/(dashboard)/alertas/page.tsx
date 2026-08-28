@@ -232,14 +232,14 @@ export default function AlertasPage() {
                 {/* Filtros de tipo */}
                 <div className="flex gap-2 flex-wrap">
                   <Button
-                    variant={filtroTipo === "all" ? "default" : "outline"}
+                    variant={filtroTipo === "all" ? "default" : "outline-solid"}
                     size="sm"
                     onClick={() => setFiltroTipo("all")}
                   >
                     Todas
                   </Button>
                   <Button
-                    variant={filtroTipo === "ATRASADO" ? "default" : "outline"}
+                    variant={filtroTipo === "ATRASADO" ? "default" : "outline-solid"}
                     size="sm"
                     onClick={() => setFiltroTipo("ATRASADO")}
                   >
@@ -247,7 +247,7 @@ export default function AlertasPage() {
                     <span className="hidden sm:inline">Atrasados</span>
                   </Button>
                   <Button
-                    variant={filtroTipo === "PROXIMO" ? "default" : "outline"}
+                    variant={filtroTipo === "PROXIMO" ? "default" : "outline-solid"}
                     size="sm"
                     onClick={() => setFiltroTipo("PROXIMO")}
                   >
@@ -255,7 +255,7 @@ export default function AlertasPage() {
                     <span className="hidden sm:inline">Próximos</span>
                   </Button>
                   <Button
-                    variant={filtroTipo === "CRITICO" ? "default" : "outline"}
+                    variant={filtroTipo === "CRITICO" ? "default" : "outline-solid"}
                     size="sm"
                     onClick={() => setFiltroTipo("CRITICO")}
                   >
@@ -289,7 +289,7 @@ export default function AlertasPage() {
                                   <h3 className="font-semibold text-foreground">{alerta.titulo}</h3>
                                   <p className="text-sm text-muted-foreground mt-1">{alerta.mensaje}</p>
                                 </div>
-                                <div className="flex gap-2 flex-shrink-0">
+                                <div className="flex gap-2 shrink-0">
                                   <Badge variant="outline" className={tipoConfig[alerta.tipo].color}>
                                     {tipoConfig[alerta.tipo].label}
                                   </Badge>

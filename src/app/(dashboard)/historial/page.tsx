@@ -280,7 +280,7 @@ export default function HistorialPage() {
         description="Registro completo de todas las intervenciones realizadas"
       />
 
-      <div className="sticky top-0 z-30 border-b border-border bg-card px-6 py-4 shadow-sm">
+      <div className="sticky top-0 z-30 border-b border-border bg-card px-6 py-4 shadow-xs">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
@@ -320,7 +320,7 @@ export default function HistorialPage() {
                         className="fixed inset-0 z-10" 
                         onClick={() => setIsSearching(false)} 
                       />
-                      <div className="absolute top-full mt-2 w-full z-20 rounded-lg border bg-popover text-popover-foreground shadow-lg outline-none animate-in fade-in-0 zoom-in-95 overflow-hidden">
+                      <div className="absolute top-full mt-2 w-full z-20 rounded-lg border bg-popover text-popover-foreground shadow-lg outline-hidden animate-in fade-in-0 zoom-in-95 overflow-hidden">
                         <div className="max-h-[300px] overflow-y-auto p-1">
                           {filteredEquipos.length === 0 ? (
                             <div className="py-4 text-center text-sm text-muted-foreground">
@@ -331,7 +331,7 @@ export default function HistorialPage() {
                               <div
                                 key={equipo.id}
                                 className={cn(
-                                  "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                                  "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
                                   filterEquipo === equipo.id && "bg-accent/50"
                                 )}
                                 onClick={() => {

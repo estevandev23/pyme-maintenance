@@ -14,43 +14,43 @@
 
 ## 2. Cambio de versión
 
-- [ ] 2.1 Ejecutar la herramienta oficial de migración sin aceptar el resultado
+- [x] 2.1 Ejecutar la herramienta oficial de migración sin aceptar el resultado
       todavía. Verificar que el diff se puede revisar separando
       `src/components/ui/` del resto del código.
-- [ ] 2.2 Revisar qué hizo el codemod dentro de `src/components/ui/`, que ya
+- [x] 2.2 Revisar qué hizo el codemod dentro de `src/components/ui/`, que ya
       estaba en sintaxis v4. Verificar que no convirtió lo que ya era correcto;
       descartar esa parte del diff si lo hizo.
-- [ ] 2.3 Actualizar `tailwindcss` a v4 y sustituir el plugin de PostCSS por
+- [x] 2.3 Actualizar `tailwindcss` a v4 y sustituir el plugin de PostCSS por
       `@tailwindcss/postcss` en `postcss.config.mjs`. Verificar que el proyecto
       arranca y genera CSS.
-- [ ] 2.4 Sustituir `tailwindcss-animate` por su equivalente para v4. Verificar
+- [x] 2.4 Sustituir `tailwindcss-animate` por su equivalente para v4. Verificar
       que las animaciones de apertura y cierre de diálogos y popovers siguen
       ocurriendo.
 
 ## 3. Tokens de tema
 
-- [ ] 3.1 Trasladar a `@theme` en `src/app/globals.css` los colores, radios y
+- [x] 3.1 Trasladar a `@theme` en `src/app/globals.css` los colores, radios y
       demás tokens que hoy declara `tailwind.config.ts`, conservando los mismos
       valores. Verificar que ningún token cambia de valor en el traslado.
-- [ ] 3.2 Eliminar `tailwind.config.ts` una vez trasladado su contenido.
+- [x] 3.2 Eliminar `tailwind.config.ts` una vez trasladado su contenido.
       Verificar que no queda ninguna referencia al archivo y que el proyecto
       sigue compilando.
-- [ ] 3.3 Eliminar el plugin que añadía la variante `aria-invalid`, nativa en v4.
+- [x] 3.3 Eliminar el plugin que añadía la variante `aria-invalid`, nativa en v4.
       Verificar que un campo de formulario inválido sigue mostrando su estado de
       error.
-- [ ] 3.4 Revisar los dos `@apply` de `globals.css`, cuyo comportamiento cambia
+- [x] 3.4 Revisar los dos `@apply` de `globals.css`, cuyo comportamiento cambia
       en v4. Verificar que los elementos que dependen de ellos se siguen viendo
       igual.
 
 ## 4. Deriva visual
 
-- [ ] 4.1 Dar color explícito a los bordes que hoy dependen del color por
+- [x] 4.1 Dar color explícito a los bordes que hoy dependen del color por
       defecto, usando la lista de la tarea 1.3. Verificar que ningún borde
       quedó heredando el color del texto.
-- [ ] 4.2 Corregir las clases cuya escala se desplaza (`shadow-sm`, `blur-sm`,
+- [x] 4.2 Corregir las clases cuya escala se desplaza (`shadow-sm`, `blur-sm`,
       `rounded` sin sufijo, `outline-none`) para que conserven su apariencia
       anterior. Verificar contra las referencias de la tarea 1.2.
-- [ ] 4.3 Comprobar en el CSS compilado que las clases que antes desaparecían
+- [x] 4.3 Comprobar en el CSS compilado que las clases que antes desaparecían
       ahora se emiten: `shadow-xs`, `outline-hidden` y las de tamaño por
       variable. Verificar que un elemento con `shadow-xs` tiene sombra real.
 - [ ] 4.4 Verificar el selector de fechas: celdas de día del mismo tamaño, fila
@@ -59,14 +59,14 @@
 
 ## 5. Barrera contra la recaída
 
-- [ ] 5.1 Corregir `components.json` para que describa el proyecto real,
+- [x] 5.1 Corregir `components.json` para que describa el proyecto real,
       incluida la ruta de la hoja de estilos, que hoy apunta a un archivo que no
       existe en esa ubicación. Verificar que la ruta declarada existe.
-- [ ] 5.2 Añadir una comprobación ejecutable que falle cuando el código contenga
+- [x] 5.2 Añadir una comprobación ejecutable que falle cuando el código contenga
       sintaxis de utilidades de una versión de Tailwind distinta de la instalada,
       señalando archivo y clase. Verificar introduciendo a propósito una clase de
       la versión equivocada y comprobando que falla con ese mensaje.
-- [ ] 5.3 Dejar la comprobación pasando sobre el proyecto ya migrado y
+- [x] 5.3 Dejar la comprobación pasando sobre el proyecto ya migrado y
       conectarla a los comandos de verificación del proyecto. Verificar que se
       ejecuta sin errores.
 
@@ -79,6 +79,6 @@
       mantenimiento, alta de usuario, solicitudes) comprobando estados de foco,
       error y deshabilitado. Verificar que el contorno de foco es el del sistema
       de diseño y no el del navegador.
-- [ ] 6.3 Ejecutar la suite de pruebas y el linter, y dejar constancia de que
+- [x] 6.3 Ejecutar la suite de pruebas y el linter, y dejar constancia de que
       ninguno de los dos detecta regresiones visuales — la verificación de este
       cambio es visual por naturaleza.
