@@ -1,0 +1,39 @@
+schema: spec-driven
+
+context: |
+  Language: es
+  All artifacts must be written in es.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+# Reglas por artefacto.
+# Aplican SOLO al escribir ese artefacto. No gobiernan el código: las reglas de
+# código viven en CLAUDE.md, en la raíz del repositorio.
+rules:
+  proposal:
+    - "Incluir siempre una sección de fuera de alcance con lo que se descartó a propósito y por qué. Sin ella, más adelante no se distingue lo excluido de lo olvidado."
+    - "Si el problema se detectó con una comprobación concreta, dejar la evidencia en la propuesta, no solo la conclusión."
+    - "Marcar como BREAKING todo cambio que una persona vaya a notar, incluidos los rótulos y los cambios de aspecto."
+
+  specs:
+    - "Describir lo que la persona percibe, no cómo está construido. Nada de clases de Tailwind, nombres de modelos de Prisma ni rutas de archivo."
+    - "Cuando el comportamiento dependa del rol (ADMIN, TECNICO, CLIENTE), incluir un escenario por cada rol afectado."
+    - "Si un escenario solo se puede validar mirando la pantalla, que su redacción lo deje claro."
+
+  design:
+    - "Cada decisión lleva la alternativa descartada y el motivo, no solo la elegida."
+    - "Señalar explícitamente cuándo la suite de pruebas no protege el cambio, para que una suite en verde no se confunda con trabajo verificado."
+
+  tasks:
+    - "Distinguir las tareas que necesitan la aplicación corriendo con datos reales de las que se verifican de forma automática."
+    - "Cuando el cambio pueda alterar algo difícil de comparar después, poner primero las tareas que capturan el estado de partida."
+
+# Guía por operación. Es orientativa, no una regla de contenido.
+operations:
+  apply:
+    guidance:
+      - "Comprobar el estado de git antes de empezar. En este repositorio suele haber más de una sesión trabajando a la vez sobre el mismo árbol."
+      - "Marcar una tarea como completada solo cuando su comportamiento está implementado. Si su verificación no se pudo ejecutar, dejarla sin marcar y decir por qué."
+      - "Para trabajo de interfaz, verificar viéndolo. La suite corre en jsdom y no compila CSS, así que pasa en verde con la interfaz rota."
+  archive:
+    guidance:
+      - "Antes de archivar, revisar que no queden tareas marcadas cuya verificación nunca llegó a ejecutarse."
