@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { updateMantenimientoSchema, cambiarEstadoSchema } from "@/lib/validations/mantenimiento"
 import {
   AsignacionError,
@@ -98,7 +99,7 @@ export async function GET(
 
 // Función auxiliar para actualizar estado del equipo automáticamente
 async function actualizarEstadoEquipo(
-  tx: any,
+  tx: Prisma.TransactionClient,
   equipoId: string,
   nuevoEstadoMantenimiento: string
 ) {
@@ -161,7 +162,7 @@ export async function PUT(
       }
 
       const validatedData = cambiarEstadoSchema.parse(body)
-      const updateData: any = { estado: validatedData.estado }
+      const updateData: Prisma.MantenimientoUncheckedUpdateInput = { estado: validatedData.estado }
 
       if (validatedData.observaciones !== undefined) {
         updateData.observaciones = validatedData.observaciones
@@ -216,7 +217,7 @@ export async function PUT(
     const validatedData = updateMantenimientoSchema.parse(body)
 
     // Preparar datos para actualizar
-    const updateData: any = {}
+    const updateData: Prisma.MantenimientoUncheckedUpdateInput = {}
 
     if (validatedData.tipo) updateData.tipo = validatedData.tipo
     if (validatedData.descripcion) updateData.descripcion = validatedData.descripcion

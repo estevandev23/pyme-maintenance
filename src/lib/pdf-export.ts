@@ -54,9 +54,41 @@ function addFooter(doc: jsPDF) {
 }
 
 /**
+ * Filas que espera cada exportador. Declaran solo los campos que la función
+ * lee, no el modelo completo: quien exporta ya llega con los datos aplanados.
+ */
+interface FilaEquipo {
+  tipo: string
+  marca: string
+  modelo: string | null
+  serial: string
+  estado: string
+  ubicacion: string | null
+  empresa: string
+}
+
+interface FilaMantenimiento {
+  tipo: string
+  estado: string
+  equipo: string
+  empresa: string
+  tecnico: string
+  fechaProgramada: string
+  fechaRealizada: string | null
+}
+
+interface FilaHistorial {
+  fecha: string
+  equipo: string
+  tipoMantenimiento: string
+  tecnico: string
+  observaciones: string
+}
+
+/**
  * Exporta equipos a PDF
  */
-export function exportEquiposToPDF(equipos: any[]) {
+export function exportEquiposToPDF(equipos: FilaEquipo[]) {
   const doc = new jsPDF()
   configurePDF(doc, "Reporte de Equipos")
 
@@ -108,7 +140,7 @@ export function exportEquiposToPDF(equipos: any[]) {
 /**
  * Exporta mantenimientos a PDF
  */
-export function exportMantenimientosToPDF(mantenimientos: any[]) {
+export function exportMantenimientosToPDF(mantenimientos: FilaMantenimiento[]) {
   const doc = new jsPDF()
   configurePDF(doc, "Reporte de Mantenimientos")
 
@@ -170,7 +202,7 @@ export function exportMantenimientosToPDF(mantenimientos: any[]) {
 /**
  * Exporta historial a PDF
  */
-export function exportHistorialToPDF(historial: any[], titulo?: string) {
+export function exportHistorialToPDF(historial: FilaHistorial[], titulo?: string) {
   const doc = new jsPDF()
   configurePDF(doc, titulo || "Historial de Intervenciones")
 

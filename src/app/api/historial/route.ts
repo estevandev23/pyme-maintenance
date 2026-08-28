@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     const userId = session.user.id
 
     // Construir filtros base según rol
-    let whereClause: any = {}
+    const whereClause: Prisma.HistorialWhereInput = {}
 
     // Filtros por rol
     if (userRole === "CLIENTE" && userEmpresaId) {
@@ -44,18 +45,20 @@ export async function GET(request: NextRequest) {
     }
 
     if (empresaId && userRole === "ADMIN") {
-      whereClause.equipo = { ...whereClause.equipo, empresaId }
+      whereClause.equipo = { empresaId }
     }
 
-    // Filtros de fecha
+    // Filtros de fecha. Se arma aparte porque `whereClause.fecha` admite varias
+    // formas y no se le pueden ir añadiendo claves una a una.
     if (fechaDesde || fechaHasta) {
-      whereClause.fecha = {}
+      const fecha: Prisma.DateTimeFilter = {}
       if (fechaDesde) {
-        whereClause.fecha.gte = new Date(fechaDesde)
+        fecha.gte = new Date(fechaDesde)
       }
       if (fechaHasta) {
-        whereClause.fecha.lte = new Date(fechaHasta)
+        fecha.lte = new Date(fechaHasta)
       }
+      whereClause.fecha = fecha
     }
 
     const include = {

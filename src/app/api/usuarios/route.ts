@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma, type Role } from "@prisma/client"
 import { createUserSchema } from "@/lib/validations/user"
 import { obtenerCargaPorTecnico } from "@/lib/asignacion-tecnicos.server"
 import bcrypt from "bcryptjs"
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     if (role === "TECNICO") {
       // Los técnicos dados de baja no pueden recibir asignaciones, así que
       // tampoco se ofrecen como candidatos.
-      const where: any = { role: "TECNICO", activo: true }
+      const where: Prisma.UserWhereInput = { role: "TECNICO", activo: true }
 
       if (empresaId) {
         where.empresaId = empresaId
@@ -65,10 +66,10 @@ export async function GET(request: NextRequest) {
     const pageParam = searchParams.get("page")
     const limitParam = searchParams.get("limit")
 
-    const where: any = {}
+    const where: Prisma.UserWhereInput = {}
 
     if (role) {
-      where.role = role
+      where.role = role as Role
     }
 
     if (empresaId) {

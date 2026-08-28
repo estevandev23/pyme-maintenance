@@ -65,6 +65,11 @@ interface MantenimientoFormProps {
   }
 }
 
+/** La API devuelve las fechas como cadena ISO; el formulario solo quiere el día. */
+function soloFecha(valor: string | Date): string {
+  return (typeof valor === "string" ? valor : valor.toISOString()).split("T")[0]
+}
+
 export function MantenimientoForm({
   mantenimiento,
   equipos,
@@ -105,13 +110,9 @@ export function MantenimientoForm({
         tecnicoId: mantenimiento.tecnicoId,
         tipo: mantenimiento.tipo,
         estado: mantenimiento.estado,
-        fechaProgramada: (typeof (mantenimiento.fechaProgramada as any) === 'string' 
-          ? (mantenimiento.fechaProgramada as unknown as string) 
-          : (mantenimiento.fechaProgramada as Date).toISOString()).split('T')[0],
+        fechaProgramada: soloFecha(mantenimiento.fechaProgramada),
         fechaRealizada: mantenimiento.fechaRealizada
-          ? (typeof (mantenimiento.fechaRealizada as any) === 'string' 
-              ? (mantenimiento.fechaRealizada as unknown as string) 
-              : (mantenimiento.fechaRealizada as Date).toISOString()).split('T')[0]
+          ? soloFecha(mantenimiento.fechaRealizada)
           : null,
         descripcion: mantenimiento.descripcion,
         observaciones: mantenimiento.observaciones,

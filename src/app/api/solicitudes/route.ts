@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma, type EstadoSolicitud, type PrioridadSolicitud } from "@prisma/client"
 import { solicitudSchema } from "@/lib/validations/solicitud"
 
 // GET /api/solicitudes - Listar solicitudes
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     const pageParam = searchParams.get("page")
     const limitParam = searchParams.get("limit")
 
-    const where: any = {}
+    const where: Prisma.SolicitudServicioWhereInput = {}
 
     // CLIENTE solo ve sus propias solicitudes
     if (session.user.role === "CLIENTE") {
@@ -32,11 +33,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (estado && estado !== "all") {
-      where.estado = estado
+      where.estado = estado as EstadoSolicitud
     }
 
     if (prioridad && prioridad !== "all") {
-      where.prioridad = prioridad
+      where.prioridad = prioridad as PrioridadSolicitud
     }
 
     const include = {

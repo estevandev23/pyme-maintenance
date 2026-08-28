@@ -4,8 +4,8 @@ export interface Mantenimiento {
   tecnicoId: string
   tipo: "PREVENTIVO" | "CORRECTIVO"
   estado: "PROGRAMADO" | "EN_PROCESO" | "COMPLETADO" | "CANCELADO"
-  fechaProgramada: Date
-  fechaRealizada: Date | null
+  fechaProgramada: string | Date
+  fechaRealizada: string | Date | null
   descripcion: string
   observaciones: string | null
   reporteUrl: string | null
