@@ -1,17 +1,27 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { sendContactMessage } from "@/lib/email"
-
-const contactSchema = z.object({
-  nombre: z.string().min(1, "El nombre es requerido").max(100),
-  email: z.string().email("Email inválido"),
-  mensaje: z.string().min(10, "El mensaje debe tener al menos 10 caracteres").max(1000, "Máximo 1000 caracteres"),
-})
+import { contactSchema } from "@/lib/validations/contact"
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { nombre, email, mensaje } = contactSchema.parse(body)
+    const parsed = contactSchema.safeParse(body)
+
+    if (!parsed.success) {
+      const { fieldErrors } = z.flattenError(parsed.error)
+      const primerError = Object.values(fieldErrors).flat()[0]
+
+      return NextResponse.json(
+        {
+          error: primerError ?? "Revisa los datos del formulario",
+          fieldErrors,
+        },
+        { status: 400 }
+      )
+    }
+
+    const { nombre, email, mensaje } = parsed.data
 
     await sendContactMessage(nombre, email, mensaje)
 
@@ -19,13 +29,6 @@ export async function POST(request: Request) {
       message: "Mensaje enviado correctamente.",
     })
   } catch (error) {
-    if (error instanceof Error && error.name === "ZodError") {
-      return NextResponse.json(
-        { error: "Por favor completa todos los campos correctamente" },
-        { status: 400 }
-      )
-    }
-
     console.error("Error en contacto:", error)
     return NextResponse.json(
       { error: "Error al enviar el mensaje. Inténtalo de nuevo." },
