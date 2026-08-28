@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { format, parseISO } from "date-fns"
+import { es } from "date-fns/locale"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,70 +12,87 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { MetricCard } from "@/components/metric-card"
 import { MaintenanceChart } from "@/components/maintenance-chart"
 import { MaintenanceTable } from "@/components/maintenance-table"
-import { Wrench, ClipboardList, BarChart3, Bell, FileDown, FileSpreadsheet, Clock, AlertTriangle } from "lucide-react"
+import {
+  Wrench,
+  ClipboardList,
+  BarChart3,
+  Bell,
+  FileDown,
+  FileSpreadsheet,
+  Clock,
+  AlertTriangle,
+  CalendarIcon,
+} from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import { exportEstadisticasToExcel } from "@/lib/excel-export"
 import { exportEstadisticasToPDF } from "@/lib/pdf-export"
+import {
+  etiquetaDesviacion,
+  type EstadisticasInforme,
+} from "@/lib/estadisticas"
 
-interface FallaRecurrente {
-  equipoId: string
-  cantidadFallas: number
-  equipo: {
-    tipo: string
-    marca: string
-    modelo: string | null
-    serial: string
-    empresa: string
-  } | null
-}
-
-interface DashboardStats {
-  totalEquipos: number
-  equiposPorEstado: Record<string, number>
-  totalMantenimientos: number
-  mantenimientosPorEstado: Record<string, number>
-  mantenimientosPorTipo: Record<string, number>
-  completadosEsteMes: number
-  cambioCompletados: number
-  equiposCriticos: number
-  mantenimientosPendientes: number
-  cambioPendientes: number
-  proximosMantenimientos: any[]
-  mantenimientosPorMes: Array<{
-    mes: string
-    tipo: string
-    count: number
-  }>
-  tiempoPromedioResolucion: number
-  fallasRecurrentes: FallaRecurrente[]
+/** Fecha en el formato `YYYY-MM-DD` que espera el endpoint. */
+function aParametro(fecha: Date): string {
+  return format(fecha, "yyyy-MM-dd")
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [stats, setStats] = useState<EstadisticasInforme | null>(null)
   const [loading, setLoading] = useState(true)
+  // Selección del usuario. Mientras esté vacía manda el rango por defecto del
+  // servidor, que es el que viaja de vuelta en `stats.rango`.
+  const [desde, setDesde] = useState<Date | undefined>()
+  const [hasta, setHasta] = useState<Date | undefined>()
+  const [desdeOpen, setDesdeOpen] = useState(false)
+  const [hastaOpen, setHastaOpen] = useState(false)
 
-  useEffect(() => {
-    fetchStats()
-  }, [])
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch("/api/dashboard/stats")
-      if (!response.ok) throw new Error("Error al cargar estadísticas")
+
+      const params = new URLSearchParams()
+      if (desde) params.set("desde", aParametro(desde))
+      if (hasta) params.set("hasta", aParametro(hasta))
+      const query = params.toString()
+
+      const response = await fetch(
+        `/api/dashboard/stats${query ? `?${query}` : ""}`
+      )
+
+      if (!response.ok) {
+        const detalle = await response.json().catch(() => null)
+        // Un rango inválido no debe dejar la pantalla en blanco: se avisa y se
+        // conservan los indicadores del último rango que sí era válido.
+        throw new Error(detalle?.error || "Error al cargar estadísticas")
+      }
 
       const data = await response.json()
       setStats(data)
     } catch (error) {
-      toast.error("Error al cargar estadísticas del dashboard")
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Error al cargar estadísticas del dashboard"
+      )
       console.error(error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [desde, hasta])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
 
   const handleExportExcel = () => {
     if (!stats) {
@@ -82,24 +101,12 @@ export default function DashboardPage() {
     }
 
     try {
-      const dataToExport = {
-        totalEquipos: stats.totalEquipos,
-        equiposPorEstado: Object.entries(stats.equiposPorEstado).map(([estado, cantidad]) => ({
-          estado,
-          cantidad,
-        })),
-        totalMantenimientos: stats.totalMantenimientos,
-        mantenimientosPorEstado: Object.entries(stats.mantenimientosPorEstado).map(
-          ([estado, cantidad]) => ({ estado, cantidad })
-        ),
-        mantenimientosPorMes: chartData.map((item) => ({
-          mes: item.mes,
-          cantidad: item.preventivo + item.correctivo,
-        })),
-      }
-      exportEstadisticasToExcel(dataToExport, "estadisticas_dashboard")
+      // Se manda el informe completo: cualquier indicador que el panel muestre
+      // llega al archivo sin que haya que acordarse de mapearlo aquí.
+      exportEstadisticasToExcel(stats, "estadisticas_dashboard")
       toast.success("Estadísticas exportadas a Excel")
     } catch (error) {
+      console.error(error)
       toast.error("Error al exportar a Excel")
     }
   }
@@ -111,56 +118,34 @@ export default function DashboardPage() {
     }
 
     try {
-      const dataToExport = {
-        totalEquipos: stats.totalEquipos,
-        equiposPorEstado: Object.entries(stats.equiposPorEstado).map(([estado, cantidad]) => ({
-          estado,
-          cantidad,
-        })),
-        totalMantenimientos: stats.totalMantenimientos,
-        mantenimientosPorEstado: Object.entries(stats.mantenimientosPorEstado).map(
-          ([estado, cantidad]) => ({ estado, cantidad })
-        ),
-        mantenimientosPorMes: chartData.map((item) => ({
-          mes: item.mes,
-          cantidad: item.preventivo + item.correctivo,
-        })),
-      }
-      exportEstadisticasToPDF(dataToExport)
+      exportEstadisticasToPDF(stats)
       toast.success("Estadísticas exportadas a PDF")
     } catch (error) {
+      console.error(error)
       toast.error("Error al exportar a PDF")
     }
   }
 
-  // Procesar datos para el gráfico
-  const chartData = stats?.mantenimientosPorMes
-    ? (() => {
-        const mesesMap = new Map<string, { mes: string; preventivo: number; correctivo: number }>()
+  const chartData = stats?.mantenimientosPorMes ?? []
 
-        stats.mantenimientosPorMes.forEach(item => {
-          if (!mesesMap.has(item.mes)) {
-            mesesMap.set(item.mes, { mes: item.mes, preventivo: 0, correctivo: 0 })
-          }
-          const mesData = mesesMap.get(item.mes)!
-          if (item.tipo === "PREVENTIVO") {
-            mesData.preventivo = item.count
-          } else if (item.tipo === "CORRECTIVO") {
-            mesData.correctivo = item.count
-          }
-        })
+  const rangoAplicado = stats?.rango
+  const etiquetaPeriodo = rangoAplicado
+    ? `${format(parseISO(rangoAplicado.desde), "d 'de' MMMM yyyy", {
+        locale: es,
+      })} — ${format(parseISO(rangoAplicado.hasta), "d 'de' MMMM yyyy", {
+        locale: es,
+      })}`
+    : ""
 
-        return Array.from(mesesMap.values()).sort((a, b) => a.mes.localeCompare(b.mes))
-      })()
-    : []
+  const desdeSeleccionado =
+    desde ?? (rangoAplicado ? parseISO(rangoAplicado.desde) : undefined)
+  const hastaSeleccionado =
+    hasta ?? (rangoAplicado ? parseISO(rangoAplicado.hasta) : undefined)
 
-  if (loading) {
+  if (loading && !stats) {
     return (
       <>
-        <Header
-          title="Dashboard"
-          description="Resumen general del sistema"
-        />
+        <Header title="Dashboard" description="Resumen general del sistema" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-7xl">
             <div className="flex items-center justify-center py-12">
@@ -175,14 +160,13 @@ export default function DashboardPage() {
   if (!stats) {
     return (
       <>
-        <Header
-          title="Dashboard"
-          description="Resumen general del sistema"
-        />
+        <Header title="Dashboard" description="Resumen general del sistema" />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-7xl">
             <div className="flex items-center justify-center py-12">
-              <p className="text-muted-foreground">No se pudieron cargar las estadísticas</p>
+              <p className="text-muted-foreground">
+                No se pudieron cargar las estadísticas
+              </p>
             </div>
           </div>
         </main>
@@ -192,13 +176,86 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Header
-        title="Dashboard"
-        description="Resumen general del sistema"
-      />
+      <Header title="Dashboard" description="Resumen general del sistema" />
 
       <div className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Desde</span>
+              <Popover open={desdeOpen} onOpenChange={setDesdeOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-[190px] justify-start text-left font-normal",
+                      !desdeSeleccionado && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {desdeSeleccionado
+                      ? format(desdeSeleccionado, "dd/MM/yyyy", { locale: es })
+                      : "Seleccionar"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={desdeSeleccionado}
+                    onSelect={(fecha) => {
+                      setDesde(fecha)
+                      setDesdeOpen(false)
+                    }}
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Hasta</span>
+              <Popover open={hastaOpen} onOpenChange={setHastaOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-[190px] justify-start text-left font-normal",
+                      !hastaSeleccionado && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {hastaSeleccionado
+                      ? format(hastaSeleccionado, "dd/MM/yyyy", { locale: es })
+                      : "Seleccionar"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={hastaSeleccionado}
+                    onSelect={(fecha) => {
+                      setHasta(fecha)
+                      setHastaOpen(false)
+                    }}
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {(desde || hasta) && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setDesde(undefined)
+                  setHasta(undefined)
+                }}
+              >
+                Restablecer
+              </Button>
+            )}
+          </div>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
@@ -218,6 +275,14 @@ export default function DashboardPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* El periodo representado siempre a la vista: sin él las cifras no
+            dicen a qué corresponden. */}
+        <p className="mt-3 text-sm text-muted-foreground">
+          Periodo del informe:{" "}
+          <span className="font-medium">{etiquetaPeriodo}</span>
+          {loading && " · actualizando..."}
+        </p>
       </div>
 
       <main className="flex-1 overflow-y-auto p-6">
@@ -239,8 +304,8 @@ export default function DashboardPage() {
               icon={ClipboardList}
             />
             <MetricCard
-              title="Completados (Mes)"
-              value={stats.completadosEsteMes.toString()}
+              title="Completados (Periodo)"
+              value={stats.completadosPeriodo.toString()}
               change={`${stats.cambioCompletados > 0 ? "+" : ""}${stats.cambioCompletados}%`}
               trend={stats.cambioCompletados > 0 ? "up" : "down"}
               icon={BarChart3}
@@ -252,11 +317,20 @@ export default function DashboardPage() {
               trend={stats.equiposCriticos > 0 ? "critical" : "down"}
               icon={Bell}
             />
+            {/* Mide la diferencia con la fecha programada, no el tiempo de
+                resolución de una solicitud. El rótulo lo dice para que nadie lo
+                lea como otra cosa. */}
             <MetricCard
-              title="Tiempo Promedio"
-              value={`${stats.tiempoPromedioResolucion} días`}
-              change="Resolución de mant."
-              trend={stats.tiempoPromedioResolucion <= 3 ? "up" : stats.tiempoPromedioResolucion <= 7 ? "down" : "critical"}
+              title="Desviación vs. Programado"
+              value={etiquetaDesviacion(stats.desviacionPromedioProgramacion)}
+              change="Respecto a la fecha programada"
+              trend={
+                stats.desviacionPromedioProgramacion <= 0
+                  ? "up"
+                  : stats.desviacionPromedioProgramacion <= 3
+                    ? "down"
+                    : "critical"
+              }
               icon={Clock}
             />
             <MetricCard
@@ -272,7 +346,10 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">Mantenimientos por Mes</CardTitle>
-              <p className="text-sm text-muted-foreground">Histórico de mantenimientos preventivos y correctivos (últimos 6 meses)</p>
+              <p className="text-sm text-muted-foreground">
+                Mantenimientos preventivos y correctivos · {etiquetaPeriodo} ·
+                total del periodo: {stats.totalMantenimientos}
+              </p>
             </CardHeader>
             <CardContent>
               <MaintenanceChart data={chartData} />
@@ -288,7 +365,13 @@ export default function DashboardPage() {
                 <p className="text-sm text-muted-foreground">Mantenimientos programados y en proceso</p>
               </CardHeader>
               <CardContent>
-                <MaintenanceTable data={stats.proximosMantenimientos} />
+                <MaintenanceTable
+                  data={stats.proximosMantenimientos.map((mantenimiento) => ({
+                    ...mantenimiento,
+                    // El informe viaja en JSON: la fecha llega como texto.
+                    fechaProgramada: new Date(mantenimiento.fechaProgramada),
+                  }))}
+                />
               </CardContent>
             </Card>
 
@@ -299,7 +382,7 @@ export default function DashboardPage() {
                   <AlertTriangle className="h-5 w-5 text-destructive" />
                   Fallas Recurrentes por Equipo
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">Equipos con 2 o más mantenimientos correctivos</p>
+                <p className="text-sm text-muted-foreground">Equipos con 2 o más mantenimientos correctivos en el periodo</p>
               </CardHeader>
               <CardContent>
                 {stats.fallasRecurrentes.length === 0 ? (

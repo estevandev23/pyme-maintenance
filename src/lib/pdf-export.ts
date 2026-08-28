@@ -2,6 +2,11 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import {
+  etiquetaDesviacion,
+  etiquetaRango,
+  type EstadisticasInforme,
+} from "@/lib/estadisticas"
 
 // Extender el tipo jsPDF para incluir autoTable
 declare module "jspdf" {
@@ -213,121 +218,132 @@ export function exportHistorialToPDF(historial: any[], titulo?: string) {
 /**
  * Exporta estadísticas a PDF
  */
-export function exportEstadisticasToPDF(stats: {
-  totalEquipos: number
-  equiposPorEstado: Array<{ estado: string; cantidad: number }>
-  totalMantenimientos: number
-  mantenimientosPorEstado: Array<{ estado: string; cantidad: number }>
-  mantenimientosPorMes: Array<{ mes: string; cantidad: number }>
-}) {
+export function exportEstadisticasToPDF(stats: EstadisticasInforme) {
   const doc = new jsPDF()
   configurePDF(doc, "Estadísticas del Sistema")
 
   let currentY = 38
 
-  // Resumen General
-  doc.setFontSize(12)
-  doc.setFont(undefined, "bold")
-  doc.text("Resumen General", 14, currentY)
-  currentY += 8
+  // El periodo va antes que cualquier cifra: sin él las tablas no se pueden
+  // interpretar fuera de la aplicación.
+  doc.setFontSize(10)
+  doc.setFont("helvetica", "normal")
+  doc.text(`Periodo: ${etiquetaRango(stats.rango)}`, 14, currentY)
+  currentY += 10
 
-  autoTable(doc, {
-    startY: currentY,
-    head: [["Métrica", "Valor"]],
-    body: [
-      ["Total de Equipos", stats.totalEquipos.toString()],
-      ["Total de Mantenimientos", stats.totalMantenimientos.toString()],
-    ],
-    theme: "grid",
-    headStyles: {
-      fillColor: [59, 130, 246],
-      textColor: 255,
-      fontSize: 9,
-    },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 80 },
-    },
-  })
-
-  currentY = (doc as any).lastAutoTable.finalY + 10
-
-  // Equipos por Estado
-  doc.setFontSize(12)
-  doc.setFont(undefined, "bold")
-  doc.text("Equipos por Estado", 14, currentY)
-  currentY += 8
-
-  autoTable(doc, {
-    startY: currentY,
-    head: [["Estado", "Cantidad"]],
-    body: stats.equiposPorEstado.map((e) => [e.estado, e.cantidad.toString()]),
-    theme: "grid",
-    headStyles: {
-      fillColor: [59, 130, 246],
-      textColor: 255,
-      fontSize: 9,
-    },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 80 },
-    },
-  })
-
-  currentY = (doc as any).lastAutoTable.finalY + 10
-
-  // Mantenimientos por Estado
-  doc.setFontSize(12)
-  doc.setFont(undefined, "bold")
-  doc.text("Mantenimientos por Estado", 14, currentY)
-  currentY += 8
-
-  autoTable(doc, {
-    startY: currentY,
-    head: [["Estado", "Cantidad"]],
-    body: stats.mantenimientosPorEstado.map((m) => [
-      m.estado,
-      m.cantidad.toString(),
-    ]),
-    theme: "grid",
-    headStyles: {
-      fillColor: [59, 130, 246],
-      textColor: 255,
-      fontSize: 9,
-    },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 80 },
-    },
-  })
-
-  // Si hay espacio, agregar mantenimientos por mes
-  currentY = (doc as any).lastAutoTable.finalY + 10
-  if (currentY > doc.internal.pageSize.height - 60) {
-    doc.addPage()
-    currentY = 20
+  const seccion = (titulo: string) => {
+    if (currentY > doc.internal.pageSize.height - 60) {
+      doc.addPage()
+      currentY = 20
+    }
+    doc.setFontSize(12)
+    doc.setFont("helvetica", "bold")
+    doc.text(titulo, 14, currentY)
+    currentY += 8
   }
 
-  doc.setFontSize(12)
-  doc.setFont(undefined, "bold")
-  doc.text("Mantenimientos por Mes (Últimos 6 meses)", 14, currentY)
-  currentY += 8
+  const tabla = (head: string[], body: string[][]) => {
+    autoTable(doc, {
+      startY: currentY,
+      head: [head],
+      body,
+      theme: "grid",
+      headStyles: {
+        fillColor: [59, 130, 246],
+        textColor: 255,
+        fontSize: 9,
+      },
+    })
+    const conTabla = doc as unknown as { lastAutoTable: { finalY: number } }
+    currentY = conTabla.lastAutoTable.finalY + 10
+  }
 
-  autoTable(doc, {
-    startY: currentY,
-    head: [["Mes", "Cantidad"]],
-    body: stats.mantenimientosPorMes.map((m) => [m.mes, m.cantidad.toString()]),
-    theme: "grid",
-    headStyles: {
-      fillColor: [59, 130, 246],
-      textColor: 255,
-      fontSize: 9,
-    },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 80 },
-    },
-  })
+  seccion("Resumen General")
+  tabla(
+    ["Métrica", "Valor"],
+    [
+      ["Total de Equipos", stats.totalEquipos.toString()],
+      ["Equipos Críticos", stats.equiposCriticos.toString()],
+      ["Total de Mantenimientos (periodo)", stats.totalMantenimientos.toString()],
+      ["Completados (periodo)", stats.completadosPeriodo.toString()],
+      ["Variación de completados", `${stats.cambioCompletados}%`],
+      ["Pendientes (periodo)", stats.mantenimientosPendientes.toString()],
+      ["Variación de pendientes", `${stats.cambioPendientes}%`],
+      [
+        "Desviación respecto a la fecha programada",
+        etiquetaDesviacion(stats.desviacionPromedioProgramacion),
+      ],
+      ["Equipos con fallas recurrentes", stats.fallasRecurrentes.length.toString()],
+    ]
+  )
+
+  seccion("Equipos por Estado")
+  tabla(
+    ["Estado", "Cantidad"],
+    Object.entries(stats.equiposPorEstado).map(([estado, cantidad]) => [
+      estado,
+      cantidad.toString(),
+    ])
+  )
+
+  seccion("Mantenimientos por Estado")
+  tabla(
+    ["Estado", "Cantidad"],
+    Object.entries(stats.mantenimientosPorEstado).map(([estado, cantidad]) => [
+      estado,
+      cantidad.toString(),
+    ])
+  )
+
+  seccion("Mantenimientos por Tipo")
+  tabla(
+    ["Tipo", "Cantidad"],
+    Object.entries(stats.mantenimientosPorTipo).map(([tipo, cantidad]) => [
+      tipo,
+      cantidad.toString(),
+    ])
+  )
+
+  seccion("Mantenimientos por Mes")
+  tabla(
+    ["Mes", "Preventivos", "Correctivos", "Total"],
+    stats.mantenimientosPorMes.map((m) => [
+      m.mes,
+      m.preventivo.toString(),
+      m.correctivo.toString(),
+      m.total.toString(),
+    ])
+  )
+
+  seccion("Fallas Recurrentes por Equipo")
+  tabla(
+    ["Equipo", "Serial", "Empresa", "Fallas"],
+    stats.fallasRecurrentes.map((falla) => [
+      falla.equipo
+        ? `${falla.equipo.tipo} ${falla.equipo.marca} ${falla.equipo.modelo || ""}`.trim()
+        : "-",
+      falla.equipo?.serial || "-",
+      falla.equipo?.empresa || "-",
+      falla.cantidadFallas.toString(),
+    ])
+  )
+
+  seccion("Próximos Mantenimientos")
+  tabla(
+    ["Equipo", "Empresa", "Técnico", "Tipo", "Estado", "Fecha Programada"],
+    stats.proximosMantenimientos.map((m) => [
+      m.equipo
+        ? `${m.equipo.tipo} ${m.equipo.marca} ${m.equipo.modelo || ""}`.trim()
+        : "-",
+      m.equipo?.empresa?.nombre || "-",
+      m.tecnico?.nombre || "-",
+      m.tipo,
+      m.estado,
+      m.fechaProgramada
+        ? format(new Date(m.fechaProgramada), "dd/MM/yyyy", { locale: es })
+        : "-",
+    ])
+  )
 
   addFooter(doc)
 

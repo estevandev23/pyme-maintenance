@@ -1,6 +1,11 @@
 import * as XLSX from "xlsx"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import {
+  etiquetaDesviacion,
+  etiquetaRango,
+  type EstadisticasInforme,
+} from "@/lib/estadisticas"
 
 // Tipos para los datos que vamos a exportar
 interface ExportEquipo {
@@ -184,31 +189,43 @@ export function exportHistorialToExcel(
  * Exporta estadísticas del dashboard a Excel
  */
 export function exportEstadisticasToExcel(
-  stats: {
-    totalEquipos: number
-    equiposPorEstado: Array<{ estado: string; cantidad: number }>
-    totalMantenimientos: number
-    mantenimientosPorEstado: Array<{ estado: string; cantidad: number }>
-    mantenimientosPorMes: Array<{ mes: string; cantidad: number }>
-  },
+  stats: EstadisticasInforme,
   fileName: string = "estadisticas"
 ) {
   const workbook = XLSX.utils.book_new()
+  const generado = format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })
 
-  // Sheet 1: Resumen
+  // Sheet 1: Resumen. Lleva todos los indicadores destacados del panel y el
+  // periodo con el que se generó, para que el archivo se entienda sin la app.
   const resumenData = [
+    { Métrica: "Periodo del informe", Valor: etiquetaRango(stats.rango) },
+    { Métrica: "Generado", Valor: generado },
     { Métrica: "Total de Equipos", Valor: stats.totalEquipos },
-    { Métrica: "Total de Mantenimientos", Valor: stats.totalMantenimientos },
+    { Métrica: "Equipos Críticos", Valor: stats.equiposCriticos },
+    { Métrica: "Total de Mantenimientos (periodo)", Valor: stats.totalMantenimientos },
+    { Métrica: "Completados (periodo)", Valor: stats.completadosPeriodo },
+    { Métrica: "Variación de completados (%)", Valor: stats.cambioCompletados },
+    { Métrica: "Pendientes (periodo)", Valor: stats.mantenimientosPendientes },
+    { Métrica: "Variación de pendientes (%)", Valor: stats.cambioPendientes },
+    {
+      Métrica: "Desviación respecto a la fecha programada (días)",
+      Valor: stats.desviacionPromedioProgramacion,
+    },
+    {
+      Métrica: "Desviación respecto a la fecha programada",
+      Valor: etiquetaDesviacion(stats.desviacionPromedioProgramacion),
+    },
+    { Métrica: "Equipos con fallas recurrentes", Valor: stats.fallasRecurrentes.length },
   ]
   const wsResumen = XLSX.utils.json_to_sheet(resumenData)
-  wsResumen["!cols"] = [{ wch: 25 }, { wch: 15 }]
+  wsResumen["!cols"] = [{ wch: 45 }, { wch: 25 }]
   XLSX.utils.book_append_sheet(workbook, wsResumen, "Resumen")
 
   // Sheet 2: Equipos por Estado
   const wsEquipos = XLSX.utils.json_to_sheet(
-    stats.equiposPorEstado.map((e) => ({
-      Estado: e.estado,
-      Cantidad: e.cantidad,
+    Object.entries(stats.equiposPorEstado).map(([estado, cantidad]) => ({
+      Estado: estado,
+      Cantidad: cantidad,
     }))
   )
   wsEquipos["!cols"] = [{ wch: 20 }, { wch: 12 }]
@@ -216,28 +233,82 @@ export function exportEstadisticasToExcel(
 
   // Sheet 3: Mantenimientos por Estado
   const wsMantEstado = XLSX.utils.json_to_sheet(
-    stats.mantenimientosPorEstado.map((m) => ({
-      Estado: m.estado,
-      Cantidad: m.cantidad,
+    Object.entries(stats.mantenimientosPorEstado).map(([estado, cantidad]) => ({
+      Estado: estado,
+      Cantidad: cantidad,
     }))
   )
   wsMantEstado["!cols"] = [{ wch: 20 }, { wch: 12 }]
   XLSX.utils.book_append_sheet(workbook, wsMantEstado, "Mantenimientos por Estado")
 
-  // Sheet 4: Mantenimientos por Mes
+  // Sheet 4: Mantenimientos por Tipo
+  const wsMantTipo = XLSX.utils.json_to_sheet(
+    Object.entries(stats.mantenimientosPorTipo).map(([tipo, cantidad]) => ({
+      Tipo: tipo,
+      Cantidad: cantidad,
+    }))
+  )
+  wsMantTipo["!cols"] = [{ wch: 20 }, { wch: 12 }]
+  XLSX.utils.book_append_sheet(workbook, wsMantTipo, "Mantenimientos por Tipo")
+
+  // Sheet 5: Mantenimientos por Mes. Conserva la separación preventivo /
+  // correctivo que muestra el gráfico, en lugar de sumarlos en una sola cifra.
   const wsMantMes = XLSX.utils.json_to_sheet(
     stats.mantenimientosPorMes.map((m) => ({
       Mes: m.mes,
-      Cantidad: m.cantidad,
+      Preventivos: m.preventivo,
+      Correctivos: m.correctivo,
+      Total: m.total,
     }))
   )
-  wsMantMes["!cols"] = [{ wch: 15 }, { wch: 12 }]
+  wsMantMes["!cols"] = [{ wch: 15 }, { wch: 14 }, { wch: 14 }, { wch: 12 }]
   XLSX.utils.book_append_sheet(workbook, wsMantMes, "Mantenimientos por Mes")
+
+  // Sheet 6: Fallas Recurrentes
+  const wsFallas = XLSX.utils.json_to_sheet(
+    stats.fallasRecurrentes.map((falla) => ({
+      Equipo: falla.equipo
+        ? `${falla.equipo.tipo} ${falla.equipo.marca} ${falla.equipo.modelo || ""}`.trim()
+        : "-",
+      Serial: falla.equipo?.serial || "-",
+      Empresa: falla.equipo?.empresa || "-",
+      "Cantidad de Fallas": falla.cantidadFallas,
+    }))
+  )
+  wsFallas["!cols"] = [{ wch: 35 }, { wch: 20 }, { wch: 30 }, { wch: 20 }]
+  XLSX.utils.book_append_sheet(workbook, wsFallas, "Fallas Recurrentes")
+
+  // Sheet 7: Próximos Mantenimientos
+  const wsProximos = XLSX.utils.json_to_sheet(
+    stats.proximosMantenimientos.map((m) => ({
+      Equipo: m.equipo
+        ? `${m.equipo.tipo} ${m.equipo.marca} ${m.equipo.modelo || ""}`.trim()
+        : "-",
+      Serial: m.equipo?.serial || "-",
+      Empresa: m.equipo?.empresa?.nombre || "-",
+      Técnico: m.tecnico?.nombre || "-",
+      Tipo: m.tipo,
+      Estado: m.estado,
+      "Fecha Programada": m.fechaProgramada
+        ? format(new Date(m.fechaProgramada), "dd/MM/yyyy", { locale: es })
+        : "-",
+    }))
+  )
+  wsProximos["!cols"] = [
+    { wch: 35 },
+    { wch: 20 },
+    { wch: 30 },
+    { wch: 25 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 18 },
+  ]
+  XLSX.utils.book_append_sheet(workbook, wsProximos, "Próximos Mantenimientos")
 
   // Agregar metadata
   workbook.Props = {
     Title: "Estadísticas del Sistema",
-    Subject: "Reporte de estadísticas y métricas",
+    Subject: `Reporte de estadísticas y métricas (${etiquetaRango(stats.rango)})`,
     Author: "MantenPro",
     CreatedDate: new Date(),
   }
