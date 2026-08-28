@@ -69,9 +69,9 @@
 
 ## 6. Verificación integral
 
-- [ ] 6.1 Comparar uno a uno los valores del panel con los del archivo exportado
+- [x] 6.1 Comparar uno a uno los valores del panel con los del archivo exportado
       para un mismo rango, en Excel y en PDF. Verificar que no hay diferencias.
-- [ ] 6.2 Repetir la comparación con un usuario de rol cliente y otro de rol
+- [x] 6.2 Repetir la comparación con un usuario de rol cliente y otro de rol
       técnico. Verificar que el archivo solo contiene los datos que ese usuario
       ve en pantalla.
 - [x] 6.3 Verificar que ampliar el rango al histórico completo no expone a un
