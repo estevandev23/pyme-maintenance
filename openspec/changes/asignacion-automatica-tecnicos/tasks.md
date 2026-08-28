@@ -79,5 +79,5 @@
 - [x] 6.2 Comprobar que completar un mantenimiento libera carga: tras cerrarlo,
       el siguiente reparto puede volver a elegir a ese técnico si es el de menor
       carga abierta.
-- [ ] 6.3 Ejecutar `npm test` y `npm run lint` y verificar que ambos terminan sin
+- [x] 6.3 Ejecutar `npm test` y `npm run lint` y verificar que ambos terminan sin
       errores.
