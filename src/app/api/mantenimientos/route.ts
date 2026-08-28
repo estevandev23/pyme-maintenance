@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { mantenimientoSchema } from "@/lib/validations/mantenimiento"
+import {
+  AsignacionError,
+  asignarTecnicoAutomaticamente,
+  validarTecnicoAsignable,
+} from "@/lib/asignacion-tecnicos.server"
 
 // GET /api/mantenimientos - Listar todos los mantenimientos
 export async function GET(request: NextRequest) {
@@ -171,26 +176,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
-    // Verificar que el técnico existe y es técnico
-    const tecnico = await prisma.user.findUnique({
-      where: { id: validatedData.tecnicoId },
-    })
-
-    if (!tecnico || tecnico.role !== "TECNICO") {
-      return NextResponse.json(
-        { error: "Técnico no válido" },
-        { status: 400 }
-      )
-    }
+    // El técnico es opcional: si no llega, lo decide el reparto automático
+    const tecnicoSolicitado = validatedData.tecnicoId?.trim() || null
 
     // Crear mantenimiento y entrada en historial en una transacción
     const result = await prisma.$transaction(async (tx) => {
+      // Resolver el técnico responsable justo antes de crear el registro:
+      // la elección manual manda, y si no la hay se reparte por carga.
+      let tecnicoId: string
+
+      if (tecnicoSolicitado) {
+        await validarTecnicoAsignable(tx, tecnicoSolicitado, equipo.empresaId)
+        tecnicoId = tecnicoSolicitado
+      } else {
+        const elegido = await asignarTecnicoAutomaticamente(tx, equipo.empresaId)
+        tecnicoId = elegido.id
+      }
+
       // Crear mantenimiento
       const mantenimiento = await tx.mantenimiento.create({
         data: {
           equipoId: validatedData.equipoId,
-          tecnicoId: validatedData.tecnicoId,
+          tecnicoId,
           tipo: validatedData.tipo,
           estado: validatedData.estado,
           fechaProgramada,
@@ -229,7 +236,7 @@ export async function POST(request: NextRequest) {
         data: {
           equipoId: validatedData.equipoId,
           mantenimientoId: mantenimiento.id,
-          tecnicoId: validatedData.tecnicoId,
+          tecnicoId,
           observaciones: `Mantenimiento ${validatedData.tipo.toLowerCase()} programado: ${validatedData.descripcion}`,
         },
       })
@@ -245,6 +252,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
+    if (error instanceof AsignacionError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     if (error instanceof Error && error.name === "ZodError") {
       return NextResponse.json(
         { error: "Datos inválidos", details: error },

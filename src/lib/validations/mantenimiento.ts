@@ -2,7 +2,8 @@ import { z } from "zod"
 
 export const mantenimientoSchema = z.object({
   equipoId: z.string().min(1, "El equipo es requerido"),
-  tecnicoId: z.string().min(1, "El técnico es requerido"),
+  // Opcional: su ausencia delega la elección en el reparto automático por carga.
+  tecnicoId: z.string().optional().nullable(),
   tipo: z.enum(["PREVENTIVO", "CORRECTIVO"], {
     message: "El tipo de mantenimiento es requerido",
   }),

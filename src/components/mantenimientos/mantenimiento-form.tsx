@@ -43,10 +43,16 @@ import {
 } from "@/components/ui/popover"
 
 
+/**
+ * Valor centinela del selector de técnico: delega la elección en el reparto
+ * automático del servidor. Se traduce a "sin técnico" al enviar.
+ */
+const ASIGNACION_AUTOMATICA = "__automatica__"
+
 interface MantenimientoFormProps {
   mantenimiento?: Mantenimiento
   equipos: Array<{ id: string; tipo: string; marca: string; modelo: string | null; serial: string; empresaId: string; estado: string }>
-  tecnicos: Array<{ id: string; nombre: string; email: string; empresaId: string | null }>
+  tecnicos: Array<{ id: string; nombre: string; email: string; empresaId: string | null; cargaAbierta?: number }>
   empresas: Array<{ id: string; nombre: string }>
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -81,7 +87,7 @@ export function MantenimientoForm({
     resolver: zodResolver(mantenimientoSchema),
     defaultValues: {
       equipoId: "",
-      tecnicoId: "",
+      tecnicoId: ASIGNACION_AUTOMATICA,
       tipo: "PREVENTIVO",
       estado: "PROGRAMADO",
       fechaProgramada: "",
@@ -115,7 +121,7 @@ export function MantenimientoForm({
     } else if (prefillData && open) {
       form.reset({
         equipoId: prefillData.equipoId || "",
-        tecnicoId: "",
+        tecnicoId: ASIGNACION_AUTOMATICA,
         tipo: "CORRECTIVO", // Por defecto correctivo si viene de una falla
         estado: "PROGRAMADO",
         fechaProgramada: new Date().toISOString().split('T')[0],
@@ -131,7 +137,7 @@ export function MantenimientoForm({
     } else if (open) {
       form.reset({
         equipoId: "",
-        tecnicoId: "",
+        tecnicoId: ASIGNACION_AUTOMATICA,
         tipo: "PREVENTIVO",
         estado: "PROGRAMADO",
         fechaProgramada: "",
@@ -195,7 +201,12 @@ export function MantenimientoForm({
   }
 
   const handleSubmit = async (data: MantenimientoInput) => {
-    await onSubmit(data)
+    // El centinela no viaja al servidor: la ausencia de técnico es lo que
+    // dispara el reparto automático.
+    await onSubmit({
+      ...data,
+      tecnicoId: data.tecnicoId === ASIGNACION_AUTOMATICA ? undefined : data.tecnicoId,
+    })
     form.reset()
     setSelectedFile(null)
     setSelectedEmpresaId("")
@@ -243,7 +254,11 @@ export function MantenimientoForm({
                   onValueChange={(value) => {
                     setSelectedEmpresaId(value)
                     form.setValue("equipoId", "")
-                    form.setValue("tecnicoId", "") // Resetear técnico al cambiar empresa
+                    // Resetear técnico al cambiar empresa
+                    form.setValue(
+                      "tecnicoId",
+                      mantenimiento ? "" : ASIGNACION_AUTOMATICA
+                    )
                   }}
                   disabled={!!mantenimiento}
                 >
@@ -307,8 +322,8 @@ export function MantenimientoForm({
                   <FormLabel>Técnico Asignado</FormLabel>
                    <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    value={field.value}
+                    defaultValue={field.value ?? undefined}
+                    value={field.value ?? undefined}
                     disabled={!selectedEmpresaId}
                   >
                     <FormControl>
@@ -317,10 +332,18 @@ export function MantenimientoForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      {!mantenimiento && (
+                        <SelectItem value={ASIGNACION_AUTOMATICA}>
+                          Asignación automática (técnico con menos carga)
+                        </SelectItem>
+                      )}
                       {filteredTecnicos.length > 0 ? (
                         filteredTecnicos.map((tecnico) => (
                           <SelectItem key={tecnico.id} value={tecnico.id}>
                             {tecnico.nombre} ({tecnico.email})
+                            {typeof tecnico.cargaAbierta === "number"
+                              ? ` — ${tecnico.cargaAbierta} abierto${tecnico.cargaAbierta === 1 ? "" : "s"}`
+                              : ""}
                           </SelectItem>
                         ))
                       ) : (

@@ -48,6 +48,7 @@ interface Tecnico {
   nombre: string
   email: string
   empresaId: string | null
+  cargaAbierta?: number
 }
 
 interface Empresa {

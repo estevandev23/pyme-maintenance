@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createUserSchema } from "@/lib/validations/user"
+import { obtenerCargaPorTecnico } from "@/lib/asignacion-tecnicos.server"
 import bcrypt from "bcryptjs"
 
 // GET /api/usuarios - Listar todos los usuarios
@@ -21,8 +22,10 @@ export async function GET(request: NextRequest) {
     // Si solo pide técnicos, permitir a todos los usuarios autenticados
     // (útil para mostrar asignaciones en formularios)
     if (role === "TECNICO") {
-      const where: any = { role: "TECNICO" }
-      
+      // Los técnicos dados de baja no pueden recibir asignaciones, así que
+      // tampoco se ofrecen como candidatos.
+      const where: any = { role: "TECNICO", activo: true }
+
       if (empresaId) {
         where.empresaId = empresaId
       }
@@ -38,7 +41,20 @@ export async function GET(request: NextRequest) {
           empresaId: true,
         },
       })
-      return NextResponse.json(tecnicos)
+
+      // Carga abierta de cada técnico, para que la elección manual del
+      // administrador sea informada.
+      const carga = await obtenerCargaPorTecnico(
+        prisma,
+        tecnicos.map((tecnico) => tecnico.id)
+      )
+
+      return NextResponse.json(
+        tecnicos.map((tecnico) => ({
+          ...tecnico,
+          cargaAbierta: carga.get(tecnico.id)?.cargaAbierta ?? 0,
+        }))
+      )
     }
 
     // Para otras consultas, solo admin puede ver usuarios

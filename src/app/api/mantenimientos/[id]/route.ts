@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { updateMantenimientoSchema, cambiarEstadoSchema } from "@/lib/validations/mantenimiento"
+import {
+  AsignacionError,
+  validarTecnicoAsignable,
+} from "@/lib/asignacion-tecnicos.server"
 
 // GET /api/mantenimientos/[id] - Obtener un mantenimiento por ID
 export async function GET(
@@ -236,8 +240,39 @@ export async function PUT(
       }
     }
 
+    // Reasignación de técnico: se persiste solo si realmente cambia
+    const tecnicoSolicitado = validatedData.tecnicoId?.trim() || null
+    const reasigna =
+      tecnicoSolicitado !== null && tecnicoSolicitado !== existingMantenimiento.tecnicoId
+
+    if (reasigna) {
+      updateData.tecnicoId = tecnicoSolicitado
+    }
+
     // Actualizar en transacción con historial
     const result = await prisma.$transaction(async (tx) => {
+      let tecnicoAnterior: { nombre: string } | null = null
+      let tecnicoNuevo: { nombre: string } | null = null
+
+      if (reasigna) {
+        await validarTecnicoAsignable(
+          tx,
+          tecnicoSolicitado,
+          existingMantenimiento.equipo.empresaId
+        )
+
+        ;[tecnicoAnterior, tecnicoNuevo] = await Promise.all([
+          tx.user.findUnique({
+            where: { id: existingMantenimiento.tecnicoId },
+            select: { nombre: true },
+          }),
+          tx.user.findUnique({
+            where: { id: tecnicoSolicitado },
+            select: { nombre: true },
+          }),
+        ])
+      }
+
       const mantenimiento = await tx.mantenimiento.update({
         where: { id },
         data: updateData,
@@ -281,11 +316,27 @@ export async function PUT(
         await actualizarEstadoEquipo(tx, existingMantenimiento.equipoId, validatedData.estado)
       }
 
+      // Dejar constancia de quién sustituye a quién en la reasignación
+      if (reasigna) {
+        await tx.historial.create({
+          data: {
+            equipoId: existingMantenimiento.equipoId,
+            mantenimientoId: id,
+            tecnicoId: session.user.id,
+            observaciones: `Técnico reasignado: de ${tecnicoAnterior?.nombre ?? "sin asignar"} a ${tecnicoNuevo?.nombre ?? "sin asignar"}`,
+          },
+        })
+      }
+
       return mantenimiento
     })
 
     return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof AsignacionError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     if (error instanceof Error && error.name === "ZodError") {
       return NextResponse.json(
         { error: "Datos inválidos", details: error },
