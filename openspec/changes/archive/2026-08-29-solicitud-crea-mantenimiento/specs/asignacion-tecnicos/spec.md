@@ -1,12 +1,10 @@
-# asignacion-tecnicos Specification
+> Nota de terminología para este delta: **«sin especificar técnico»** significa
+> que quien crea el mantenimiento no indica ninguno y delega en el reparto
+> automático. **«sin técnico asignado»** significa que el mantenimiento no tiene
+> técnico, porque no había ninguno a quien asignárselo o porque se le retiró. El
+> spec original usaba la primera expresión en ambos sentidos.
 
-## Purpose
-Define cómo el sistema determina qué técnico es responsable de un mantenimiento:
-el reparto automático por carga de trabajo dentro de la empresa dueña del equipo,
-la reasignación manual por parte del administrador, y las condiciones que hacen
-válida una asignación.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Definición de la carga de un técnico
 
@@ -48,26 +46,6 @@ contando en su carga histórica.
 - **AND** cancelarlo no lo convierte por sí solo en el destinatario del
   siguiente reparto
 
-
-### Requirement: Candidatos a recibir una asignación
-
-El sistema SHALL considerar candidato a un mantenimiento únicamente a los
-usuarios con rol `TECNICO`, marcados como activos, y pertenecientes a la misma
-empresa que el equipo sobre el que se realiza el mantenimiento.
-
-#### Scenario: Un técnico de otra empresa no es candidato
-
-- **WHEN** se determina el conjunto de candidatos para un mantenimiento sobre un
-  equipo de la empresa A
-- **THEN** los técnicos asociados a una empresa distinta de A quedan excluidos
-
-#### Scenario: Un técnico inactivo no es candidato
-
-- **WHEN** se determina el conjunto de candidatos y uno de los técnicos de la
-  empresa está marcado como inactivo
-- **THEN** ese técnico queda excluido del conjunto
-
-
 ### Requirement: Asignación automática al técnico con menor carga
 
 Cuando se crea un mantenimiento sin especificar técnico **y existe al menos un
@@ -105,39 +83,6 @@ según el requisito «Empresa sin técnicos disponibles».
 - **THEN** los tres primeros mantenimientos quedan asignados a candidatos
   distintos
 
-
-### Requirement: La elección manual del administrador prevalece
-
-Cuando el administrador especifica un técnico al crear un mantenimiento, el
-sistema SHALL respetar esa elección y no aplicar el reparto automático.
-
-#### Scenario: Se crea un mantenimiento con técnico indicado
-
-- **WHEN** el administrador crea un mantenimiento indicando un técnico válido que
-  no es el de menor carga
-- **THEN** el mantenimiento queda asignado al técnico indicado
-
-
-### Requirement: Validación de una asignación explícita
-
-El sistema SHALL rechazar la creación o la actualización de un mantenimiento
-cuando el técnico indicado no cumple las condiciones de candidato, y MUST
-responder con un mensaje que identifique el motivo del rechazo.
-
-#### Scenario: Técnico de otra empresa
-
-- **WHEN** se indica un técnico que pertenece a una empresa distinta de la del
-  equipo
-- **THEN** la operación es rechazada
-- **AND** la respuesta indica que el técnico no pertenece a la empresa del equipo
-
-#### Scenario: Técnico inactivo
-
-- **WHEN** se indica un técnico marcado como inactivo
-- **THEN** la operación es rechazada
-- **AND** la respuesta indica que el técnico no está activo
-
-
 ### Requirement: Empresa sin técnicos disponibles
 
 Cuando se crea un mantenimiento sin especificar técnico y la empresa del equipo
@@ -157,7 +102,6 @@ mantenimiento está a la espera de técnico.
 - **WHEN** se crea un mantenimiento sin especificar técnico para un equipo cuya
   empresa tiene técnicos, pero todos marcados como inactivos
 - **THEN** el mantenimiento se crea sin técnico asignado
-
 
 ### Requirement: Reasignación manual de un mantenimiento
 
@@ -212,7 +156,6 @@ en una actualización deja el mantenimiento sin técnico asignado.
 - **THEN** se le ofrece dejarlo sin técnico asignado, de forma distinguible de
   la asignación automática
 
-
 ### Requirement: Trazabilidad de la reasignación
 
 Cuando cambia el técnico de un mantenimiento, el sistema SHALL registrar una
@@ -243,6 +186,7 @@ entrada SHALL dejar constancia de esa ausencia en lugar de omitirse.
 - **THEN** el historial del equipo incluye una entrada que deja constancia de
   que el mantenimiento queda sin técnico asignado
 
+## ADDED Requirements
 
 ### Requirement: Un mantenimiento sin técnico asignado es un estado válido y localizable
 
@@ -277,7 +221,6 @@ asignado MUST NOT aparecer en el trabajo de ningún técnico.
 - **THEN** el contenido se muestra completo e indica que aún no hay técnico
 - **AND** esto solo se puede dar por bueno viendo cada pantalla y abriendo cada
   archivo, porque el fallo que evita es de presentación
-
 
 ### Requirement: Al hacer opcional el técnico no se pierde el bloqueo de borrado
 
