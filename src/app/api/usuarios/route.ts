@@ -20,9 +20,16 @@ export async function GET(request: NextRequest) {
     const role = searchParams.get("role")
     const empresaId = searchParams.get("empresaId")
 
-    // Si solo pide técnicos, permitir a todos los usuarios autenticados
-    // (útil para mostrar asignaciones en formularios)
-    if (role === "TECNICO") {
+    // Atajo para los desplegables de los formularios: pedir los técnicos
+    // asignables sin ser administrador. Devuelve un array pelado, no la forma
+    // paginada.
+    //
+    // Se acota a quien NO pide paginación. La pantalla de administración de
+    // usuarios sí la pide, y al filtrar por técnico caía aquí: recibía el array
+    // y leía `result.data`, que era `undefined`, con lo que la tabla reventaba
+    // al mirar su longitud. Los formularios no envían `page`, así que siguen
+    // entrando por este camino.
+    if (role === "TECNICO" && !searchParams.get("page")) {
       // Los técnicos dados de baja no pueden recibir asignaciones, así que
       // tampoco se ofrecen como candidatos.
       const where: Prisma.UserWhereInput = { role: "TECNICO", activo: true }
