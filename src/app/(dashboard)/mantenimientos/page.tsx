@@ -30,6 +30,8 @@ import { exportMantenimientosToPDF } from "@/lib/pdf-export"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { Mantenimiento } from "@/types/mantenimiento"
+import { DIAS_VENTANA_PROXIMIDAD, diasNaturalesHasta } from "@/lib/dias-naturales"
+import { SIN_ASIGNAR, SIN_TECNICO } from "@/lib/tecnico-asignado"
 import { DataPagination } from "@/components/ui/data-pagination"
 
 
@@ -69,14 +71,9 @@ function MantenimientosPageContent() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingMantenimiento, setEditingMantenimiento] = useState<Mantenimiento | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [prefillData, setPrefillData] = useState<{ equipoId?: string; descripcion?: string } | undefined>()
 
-  // Filtro por ID desde URL (viene de alertas)
+  // Filtro por ID desde URL (viene de alertas y de la pantalla de solicitudes)
   const filterId = searchParams.get("id")
-  // Prefill desde solicitudes
-  const shouldCreate = searchParams.get("create") === "true"
-  const prefillEquipoId = searchParams.get("equipoId")
-  const prefillDesc = searchParams.get("descripcion")
 
   // Filtros
   const [filterEstado, setFilterEstado] = useState<string>("all")
@@ -101,23 +98,19 @@ function MantenimientosPageContent() {
     }
     fetchMantenimientos()
 
-    // Manejar pre-llenado desde solicitudes
-    if (shouldCreate && prefillEquipoId) {
-      setPrefillData({
-        equipoId: prefillEquipoId,
-        descripcion: prefillDesc || "",
-      })
-      setFormOpen(true)
-      
-      // Limpiar URL para evitar re-apertura al recargar
-      const newParams = new URLSearchParams(searchParams.toString())
-      newParams.delete("create")
-      newParams.delete("equipoId")
-      newParams.delete("descripcion")
-      const newPath = `/mantenimientos${newParams.toString() ? `?${newParams.toString()}` : ""}`
-      window.history.replaceState(null, "", newPath)
-    }
-  }, [session, shouldCreate, prefillEquipoId, prefillDesc])
+    // El pre-llenado desde solicitudes ya no existe.
+    //
+    // Venía de la aprobación del administrador, que redirigía aquí con los
+    // datos en la dirección y abría el formulario. Ese camino producía
+    // mantenimientos duplicados —el formulario no sabía si la solicitud ya
+    // tenía uno— y es justo lo que este cambio elimina: ahora la solicitud crea
+    // su mantenimiento sola, y para las que se quedaron sin él hay una acción
+    // propia en la pantalla de solicitudes.
+    //
+    // Los parámetros `create`, `equipoId` y `descripcion` dejan de tener
+    // efecto. Una dirección antigua guardada en marcadores o en el historial
+    // del navegador ya no abre ningún diálogo.
+  }, [session])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -274,7 +267,6 @@ function MantenimientosPageContent() {
     setFormOpen(open)
     if (!open) {
       setEditingMantenimiento(undefined)
-      setPrefillData(undefined)
     }
   }
 
@@ -284,17 +276,17 @@ function MantenimientosPageContent() {
     router.push("/mantenimientos")
   }
 
-  // Función para verificar si un mantenimiento está en alerta
+  // Verifica si un mantenimiento está en alerta por su fecha.
+  //
+  // Usa el mismo cálculo de días que la tabla y que la ruta de avisos, en
+  // `@/lib/dias-naturales`. Antes había tres copias del umbral en tres archivos
+  // que no se importaban entre sí.
   const isInAlert = (mant: Mantenimiento): boolean => {
-    const hoy = new Date()
-    hoy.setHours(0, 0, 0, 0)
-    const fechaProgramada = new Date(mant.fechaProgramada)
-    fechaProgramada.setHours(0, 0, 0, 0)
-    const diffDays = Math.ceil((fechaProgramada.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+    const diffDays = diasNaturalesHasta(mant.fechaProgramada)
 
     if (mant.estado === "COMPLETADO" || mant.estado === "CANCELADO") return false
     if (diffDays < 0 && (mant.estado === "PROGRAMADO" || mant.estado === "EN_PROCESO")) return true
-    if (diffDays >= 0 && diffDays <= 3 && mant.estado === "PROGRAMADO") return true
+    if (diffDays >= 0 && diffDays <= DIAS_VENTANA_PROXIMIDAD && mant.estado === "PROGRAMADO") return true
     return false
   }
 
@@ -313,7 +305,7 @@ function MantenimientosPageContent() {
         estado: mant.estado,
         equipo: `${mant.equipo.tipo} - ${mant.equipo.marca} ${mant.equipo.modelo || ""} (${mant.equipo.serial})`,
         empresa: mant.equipo.empresa.nombre,
-        tecnico: mant.tecnico.nombre,
+        tecnico: mant.tecnico?.nombre ?? null,
         fechaProgramada: format(new Date(mant.fechaProgramada), "dd/MM/yyyy", { locale: es }),
         fechaRealizada: mant.fechaRealizada
           ? format(new Date(mant.fechaRealizada), "dd/MM/yyyy", { locale: es })
@@ -335,7 +327,7 @@ function MantenimientosPageContent() {
         estado: mant.estado,
         equipo: `${mant.equipo.tipo} - ${mant.equipo.marca}`,
         empresa: mant.equipo.empresa.nombre,
-        tecnico: mant.tecnico.nombre,
+        tecnico: mant.tecnico?.nombre ?? null,
         fechaProgramada: format(new Date(mant.fechaProgramada), "dd/MM/yyyy", { locale: es }),
         fechaRealizada: mant.fechaRealizada
           ? format(new Date(mant.fechaRealizada), "dd/MM/yyyy", { locale: es })
@@ -370,7 +362,7 @@ function MantenimientosPageContent() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button
-                variant={filterAlerta ? "default" : "outline-solid"}
+                variant={filterAlerta ? "default" : "outline"}
                 size="sm"
                 onClick={() => setFilterAlerta(!filterAlerta)}
                 className={filterAlerta ? "bg-red-500 hover:bg-red-600" : ""}
@@ -445,6 +437,9 @@ function MantenimientosPageContent() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos los técnicos</SelectItem>
+                      {/* Los que esperan técnico: sin esta opción no habría
+                          forma de localizarlos desde el listado. */}
+                      <SelectItem value={SIN_ASIGNAR}>{SIN_TECNICO}</SelectItem>
                       {tecnicos.map((tecnico) => (
                         <SelectItem key={tecnico.id} value={tecnico.id}>
                           {tecnico.nombre}
@@ -540,7 +535,6 @@ function MantenimientosPageContent() {
 
       <MantenimientoForm
         mantenimiento={editingMantenimiento}
-        prefillData={prefillData}
         equipos={equipos}
         tecnicos={tecnicos}
         empresas={empresas}

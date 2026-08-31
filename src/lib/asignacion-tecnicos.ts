@@ -10,7 +10,11 @@ export interface CandidatoTecnico {
   nombre?: string
   /** Mantenimientos en estado PROGRAMADO o EN_PROCESO asignados al técnico. */
   cargaAbierta: number
-  /** Mantenimientos asignados al técnico en cualquier estado. */
+  /**
+   * Mantenimientos asignados al técnico en cualquier estado, salvo los que
+   * canceló otra persona: esos no llegó a hacerlos y no deben penalizarle en el
+   * desempate. Su propia cancelación sí cuenta.
+   */
   cargaHistorica: number
 }
 

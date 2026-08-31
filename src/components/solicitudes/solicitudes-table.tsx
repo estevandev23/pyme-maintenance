@@ -1,11 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { MoreHorizontal, Ticket, Eye, X, CheckCircle, XCircle, Clock } from "lucide-react"
+import { MoreHorizontal, Ticket, Eye, X, CheckCircle, XCircle, Clock, Ban, Wrench } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { LucideIcon } from "lucide-react"
+import Link from "next/link"
 import type { Solicitud } from "@/types/solicitud"
+import { decidirCancelacionCliente } from "@/lib/cancelacion-solicitud"
+import { SIN_TECNICO } from "@/lib/tecnico-asignado"
+
 import {
   Table,
   TableBody,
@@ -44,7 +48,38 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
+
+/**
+ * Estados de solicitud a los que el administrador puede crearles el
+ * mantenimiento.
+ *
+ * No basta con mirar si falta el enlace: bajo el flujo anterior, aprobar dejaba
+ * la solicitud en APROBADA y el mantenimiento se creaba sin referencia a ella,
+ * así que todas las aprobadas históricas parecen huérfanas aunque su trabajo
+ * exista. Ofrecerles la acción crearía un segundo mantenimiento.
+ */
+const PUEDE_CREAR_MANTENIMIENTO: string[] = ["PENDIENTE", "EN_REVISION"]
+
+/**
+ * Cómo se nombra a quien canceló.
+ *
+ * Se prefiere el nombre cuando consta. Puede no constar: la relación con el
+ * autor se pone a nulo si se elimina al usuario, y el rol sobrevive para eso.
+ */
+function etiquetaDeAutor(solicitud: Solicitud): string {
+  if (solicitud.canceladaPor?.nombre) return solicitud.canceladaPor.nombre
+
+  switch (solicitud.canceladoPorRol) {
+    case "CLIENTE":
+      return "el cliente"
+    case "TECNICO":
+      return "el técnico"
+    case "ADMIN":
+      return "el administrador"
+    default:
+      return "un usuario ya eliminado"
+  }
+}
 
 interface SolicitudesTableProps {
   solicitudes: Solicitud[]
@@ -57,6 +92,10 @@ const estadoConfig: Record<string, { label: string; color: string; icon: LucideI
   EN_REVISION: { label: "En Revisión", color: "bg-blue-500/10 text-blue-700 border-blue-200", icon: Eye },
   APROBADA: { label: "Aprobada", color: "bg-green-500/10 text-green-700 border-green-200", icon: CheckCircle },
   RECHAZADA: { label: "Rechazada", color: "bg-red-500/10 text-red-700 border-red-200", icon: XCircle },
+  // Distinto de RECHAZADA a propósito: aquella la denegó el administrador,
+  // esta la canceló alguien sobre un trabajo que ya existía. Con un solo
+  // rótulo, el cliente veía "Rechazada" sobre algo que canceló él.
+  CANCELADA: { label: "Cancelada", color: "bg-slate-500/10 text-slate-700 border-slate-200", icon: Ban },
 }
 
 const prioridadConfig: Record<string, { label: string; color: string }> = {
@@ -71,11 +110,9 @@ export function SolicitudesTable({
   userRole,
   onRefresh,
 }: SolicitudesTableProps) {
-  const router = useRouter()
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [reviewSolicitud, setReviewSolicitud] = useState<Solicitud | null>(null)
-  const [reviewOpen, setReviewOpen] = useState(false)
-  const [respuesta, setRespuesta] = useState("")
+  const [cancelSolicitud, setCancelSolicitud] = useState<Solicitud | null>(null)
+  const [motivoCancelacion, setMotivoCancelacion] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [detailSolicitud, setDetailSolicitud] = useState<Solicitud | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -99,50 +136,57 @@ export function SolicitudesTable({
     }
   }
 
-  const handleStatusChange = async (solicitud: Solicitud, estado: string, respuestaText?: string) => {
+  /**
+   * Crea el mantenimiento de una solicitud que se quedó sin él.
+   *
+   * Una sola llamada, sin formulario intermedio: el servidor aplica las mismas
+   * reglas que la creación automática. El flujo anterior redirigía a un
+   * formulario precargado que no sabía si ya existía un mantenimiento, y de ahí
+   * salían los duplicados.
+   */
+  const handleCrearMantenimiento = async (solicitud: Solicitud) => {
     try {
       setIsSubmitting(true)
-      const body: { estado: string; respuesta?: string } = { estado }
-      if (respuestaText) body.respuesta = respuestaText
-
-      const response = await fetch(`/api/solicitudes/${solicitud.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      const response = await fetch(`/api/solicitudes/${solicitud.id}/mantenimiento`, {
+        method: "POST",
       })
+      const result = await response.json()
 
       if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || "Error al actualizar")
+        throw new Error(result.error || "Error al crear el mantenimiento")
       }
 
-      toast.success(`Solicitud ${estado === "APROBADA" ? "aprobada" : estado === "RECHAZADA" ? "rechazada" : "actualizada"}`)
-      setReviewOpen(false)
-      setReviewSolicitud(null)
-      setRespuesta("")
+      if (result.avisoSinTecnico) {
+        toast.warning(result.avisoSinTecnico)
+      } else {
+        toast.success(
+          `Mantenimiento creado y asignado a ${result.mantenimiento.tecnicoNombre}`
+        )
+      }
       onRefresh()
-
-      // Si se aprueba, redirigir a crear mantenimiento
-      if (estado === "APROBADA") {
-        const params = new URLSearchParams()
-        params.append("equipoId", solicitud.equipoId)
-        params.append("descripcion", solicitud.descripcion)
-        params.append("create", "true")
-        router.push(`/mantenimientos?${params.toString()}`)
-      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error al actualizar")
+      toast.error(error instanceof Error ? error.message : "Error al crear el mantenimiento")
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleClientCancel = async (id: string) => {
+  /** Cancela la solicitud del cliente con el motivo que haya escrito. */
+  const handleClientCancel = async () => {
+    if (!cancelSolicitud) return
+
+    const motivo = motivoCancelacion.trim()
+    if (!motivo) {
+      toast.error("Indique el motivo de la cancelación")
+      return
+    }
+
     try {
-      const response = await fetch(`/api/solicitudes/${id}`, {
+      setIsSubmitting(true)
+      const response = await fetch(`/api/solicitudes/${cancelSolicitud.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: "RECHAZADA" }),
+        body: JSON.stringify({ motivoCancelacion: motivo }),
       })
 
       if (!response.ok) {
@@ -151,9 +195,13 @@ export function SolicitudesTable({
       }
 
       toast.success("Solicitud cancelada")
+      setCancelSolicitud(null)
+      setMotivoCancelacion("")
       onRefresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al cancelar")
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -252,33 +300,37 @@ export function SolicitudesTable({
                         <Eye className="mr-2 h-4 w-4" />
                         Ver detalles
                       </DropdownMenuItem>
-                      {isAdmin && solicitud.estado === "PENDIENTE" && (
+                      {/* Ver el mantenimiento que atiende la solicitud. */}
+                      {solicitud.mantenimiento && (
+                        <DropdownMenuItem asChild>
+                          <Link href={`/mantenimientos?id=${solicitud.mantenimiento.id}`}>
+                            <Wrench className="mr-2 h-4 w-4" />
+                            Ver mantenimiento
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {/* Crear el mantenimiento de una solicitud que se quedó
+                          sin él. Solo sobre pendientes y en revisión: una
+                          aprobada anterior al cambio ya tiene su trabajo hecho
+                          aunque no conserve el enlace, y ofrecérselo duplicaría
+                          el mantenimiento. */}
+                      {isAdmin && PUEDE_CREAR_MANTENIMIENTO.includes(solicitud.estado) && !solicitud.mantenimiento && (
                         <>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleStatusChange(solicitud, "EN_REVISION")}>
-                            <Clock className="mr-2 h-4 w-4" />
-                            Marcar en revisión
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => { setReviewSolicitud(solicitud); setReviewOpen(true) }}>
-                            <CheckCircle className="mr-2 h-4 w-4" />
-                            Aprobar / Rechazar
+                          <DropdownMenuItem onClick={() => handleCrearMantenimiento(solicitud)}>
+                            <Wrench className="mr-2 h-4 w-4" />
+                            Crear mantenimiento
                           </DropdownMenuItem>
                         </>
                       )}
-                      {isAdmin && solicitud.estado === "EN_REVISION" && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => { setReviewSolicitud(solicitud); setReviewOpen(true) }}>
-                            <CheckCircle className="mr-2 h-4 w-4" />
-                            Aprobar / Rechazar
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      {!isAdmin && solicitud.estado === "PENDIENTE" && (
+                      {/* La puerta del cliente es el estado del MANTENIMIENTO,
+                          no el de la solicitud: con la creación automática
+                          ninguna llega a estar pendiente. */}
+                      {!isAdmin && decidirCancelacionCliente(solicitud.mantenimiento?.estado).permitida && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => handleClientCancel(solicitud.id)}
+                            onClick={() => setCancelSolicitud(solicitud)}
                             className="text-destructive focus:text-destructive"
                           >
                             <X className="mr-2 h-4 w-4" />
@@ -350,6 +402,41 @@ export function SolicitudesTable({
                   {detailSolicitud.descripcion}
                 </p>
               </div>
+              {/* El mantenimiento que atiende la solicitud. */}
+              {detailSolicitud.mantenimiento && (
+                <div>
+                  <Label className="text-muted-foreground text-xs">Mantenimiento</Label>
+                  <p className="text-sm mt-1">
+                    Programado para{" "}
+                    {format(
+                      new Date(detailSolicitud.mantenimiento.fechaProgramada),
+                      "dd/MM/yyyy",
+                      { locale: es }
+                    )}
+                    {" — "}
+                    {detailSolicitud.mantenimiento.tecnico
+                      ? detailSolicitud.mantenimiento.tecnico.nombre
+                      : SIN_TECNICO}
+                  </p>
+                </div>
+              )}
+              {/* El motivo de la cancelación, con su autor.
+                  Antes esto vivía en el campo de respuesta y se mostraba bajo
+                  el rótulo "Respuesta del administrador", así que el cliente
+                  veía su propia cancelación presentada como decisión ajena. */}
+              {detailSolicitud.motivoCancelacion && (
+                <div>
+                  <Label className="text-muted-foreground text-xs">
+                    Cancelada por {etiquetaDeAutor(detailSolicitud)}
+                    {detailSolicitud.canceladoEn
+                      ? ` el ${format(new Date(detailSolicitud.canceladoEn), "dd/MM/yyyy", { locale: es })}`
+                      : ""}
+                  </Label>
+                  <p className="text-sm mt-1 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    {detailSolicitud.motivoCancelacion}
+                  </p>
+                </div>
+              )}
               {detailSolicitud.respuesta && (
                 <div>
                   <Label className="text-muted-foreground text-xs">Respuesta del administrador</Label>
@@ -369,62 +456,71 @@ export function SolicitudesTable({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Aprobar/Rechazar (Admin) */}
-      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+      {/* Cancelar la solicitud (Cliente).
+          Pide confirmación y motivo: ya no cancela un papel pendiente, cancela
+          un mantenimiento vivo que puede tener técnico asignado. */}
+      <Dialog
+        open={!!cancelSolicitud}
+        onOpenChange={(abierto) => {
+          if (!abierto) {
+            setCancelSolicitud(null)
+            setMotivoCancelacion("")
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Revisar Solicitud</DialogTitle>
+            <DialogTitle>Cancelar solicitud</DialogTitle>
             <DialogDescription>
-              {reviewSolicitud && (
+              {cancelSolicitud && (
                 <>
-                  <strong>{reviewSolicitud.equipo.tipo} - {reviewSolicitud.equipo.marca}</strong>
-                  {" — "}reportado por {reviewSolicitud.cliente.nombre}
+                  Se cancelará el mantenimiento de{" "}
+                  <strong>
+                    {cancelSolicitud.equipo.tipo} - {cancelSolicitud.equipo.marca}
+                  </strong>
+                  {cancelSolicitud.mantenimiento?.tecnico
+                    ? `, asignado a ${cancelSolicitud.mantenimiento.tecnico.nombre}.`
+                    : "."}
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
-          {reviewSolicitud && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-muted-foreground text-xs">Problema reportado</Label>
-                <p className="text-sm mt-1 whitespace-pre-wrap bg-muted/50 p-3 rounded-lg">
-                  {reviewSolicitud.descripcion}
-                </p>
-              </div>
-              <div>
-                <Label>Respuesta (opcional)</Label>
-                <Textarea
-                  placeholder="Escribe una respuesta para el cliente..."
-                  className="resize-none mt-1"
-                  rows={3}
-                  value={respuesta}
-                  onChange={(e) => setRespuesta(e.target.value)}
-                />
-              </div>
-              <DialogFooter className="flex gap-2 sm:gap-0">
-                <Button
-                  variant="outline"
-                  onClick={() => { setReviewOpen(false); setRespuesta("") }}
-                  disabled={isSubmitting}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => handleStatusChange(reviewSolicitud, "RECHAZADA", respuesta || undefined)}
-                  disabled={isSubmitting}
-                >
-                  Rechazar
-                </Button>
-                <Button
-                  onClick={() => handleStatusChange(reviewSolicitud, "APROBADA", respuesta || undefined)}
-                  disabled={isSubmitting}
-                >
-                  Aprobar
-                </Button>
-              </DialogFooter>
+          <div className="space-y-4">
+            <div>
+              <Label>
+                Motivo de la cancelación <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                placeholder="¿Por qué ya no hace falta este mantenimiento?"
+                className="resize-none mt-1"
+                rows={3}
+                value={motivoCancelacion}
+                onChange={(e) => setMotivoCancelacion(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Quedará registrado y lo verá quien atienda la solicitud.
+              </p>
             </div>
-          )}
+            <DialogFooter className="flex gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCancelSolicitud(null)
+                  setMotivoCancelacion("")
+                }}
+                disabled={isSubmitting}
+              >
+                Volver
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleClientCancel}
+                disabled={isSubmitting || !motivoCancelacion.trim()}
+              >
+                Cancelar solicitud
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -7,6 +7,7 @@ import {
   exportEstadisticasToPDF,
 } from "@/lib/pdf-export"
 import type { EstadisticasInforme } from "@/lib/estadisticas"
+import { SIN_TECNICO } from "@/lib/tecnico-asignado"
 
 // Mock jsPDF
 jest.mock("jspdf", () => {
@@ -121,6 +122,27 @@ describe("PDF Export Functions", () => {
       ]
 
       expect(() => exportMantenimientosToPDF(mantenimientos)).not.toThrow()
+    })
+
+    it("exporta un mantenimiento sin técnico con la etiqueta de ausencia", () => {
+      const mantenimientos = [
+        {
+          tipo: "CORRECTIVO",
+          estado: "PROGRAMADO",
+          equipo: "Servidor Lenovo",
+          empresa: "TechSolutions",
+          tecnico: null,
+          fechaProgramada: "2026-09-02",
+          fechaRealizada: null,
+        },
+      ]
+
+      expect(() => exportMantenimientosToPDF(mantenimientos)).not.toThrow()
+
+      const opciones = (autoTable as unknown as jest.Mock).mock.calls[0][1]
+      const fila = opciones.body[0]
+      expect(fila).toContain(SIN_TECNICO)
+      expect(fila).toContain("Servidor Lenovo")
     })
   })
 

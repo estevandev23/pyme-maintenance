@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  camposConProblema,
+  esErrorDeValidacion,
+  mensajeDeValidacion,
+} from "@/lib/respuesta-validacion"
 import { Prisma, type EstadoMantenimiento, type TipoMantenimiento } from "@prisma/client"
 import { mantenimientoSchema } from "@/lib/validations/mantenimiento"
 import {
   AsignacionError,
-  asignarTecnicoAutomaticamente,
+  intentarAsignarTecnico,
   validarTecnicoAsignable,
 } from "@/lib/asignacion-tecnicos.server"
+import { sincronizarEstadoEquipo } from "@/lib/estado-equipo.server"
+import { SIN_ASIGNAR } from "@/lib/tecnico-asignado"
 
 // GET /api/mantenimientos - Listar todos los mantenimientos
 export async function GET(request: NextRequest) {
@@ -36,7 +43,15 @@ export async function GET(request: NextRequest) {
     if (id) andFilters.push({ id })
     if (estado) andFilters.push({ estado: estado as EstadoMantenimiento })
     if (tipo) andFilters.push({ tipo: tipo as TipoMantenimiento })
-    if (tecnicoId) andFilters.push({ tecnicoId })
+    // `sin-asignar` es un valor propio, no un identificador: es la única forma
+    // de pedir los mantenimientos que esperan técnico, porque el parámetro
+    // siempre llega como cadena y `?tecnicoId=null` filtraría por el texto
+    // literal «null» y devolvería cero filas sin error.
+    if (tecnicoId === SIN_ASIGNAR) {
+      andFilters.push({ tecnicoId: null })
+    } else if (tecnicoId) {
+      andFilters.push({ tecnicoId })
+    }
     if (equipoId) andFilters.push({ equipoId })
 
     // Búsqueda multi-término
@@ -96,6 +111,12 @@ export async function GET(request: NextRequest) {
           nombre: true,
           email: true,
         },
+      },
+      // La solicitud de origen viaja en el listado y no solo en la consulta por
+      // identificador: el diálogo de detalle se pinta con el objeto que ya está
+      // en la tabla, así que sin esto no la vería.
+      solicitud: {
+        select: { id: true, prioridad: true, createdAt: true },
       },
     }
 
@@ -184,14 +205,19 @@ export async function POST(request: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       // Resolver el técnico responsable justo antes de crear el registro:
       // la elección manual manda, y si no la hay se reparte por carga.
-      let tecnicoId: string
+      //
+      // Si la empresa del equipo no tiene ningún candidato, el mantenimiento se
+      // crea igualmente sin técnico y queda a la espera. Antes esto abortaba
+      // con un error: el trabajo existe aunque todavía no haya a quién
+      // asignárselo, y negarse a registrarlo solo lo dejaba fuera del sistema.
+      let tecnicoId: string | null
 
       if (tecnicoSolicitado) {
         await validarTecnicoAsignable(tx, tecnicoSolicitado, equipo.empresaId)
         tecnicoId = tecnicoSolicitado
       } else {
-        const elegido = await asignarTecnicoAutomaticamente(tx, equipo.empresaId)
-        tecnicoId = elegido.id
+        const elegido = await intentarAsignarTecnico(tx, equipo.empresaId)
+        tecnicoId = elegido?.id ?? null
       }
 
       // Crear mantenimiento
@@ -232,34 +258,53 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Crear entrada en historial
+      // Crear entrada en historial.
+      //
+      // Se firma con quien provoca el asiento, no con el técnico asignado: el
+      // técnico puede no existir, y aunque exista, quien creó el mantenimiento
+      // fue el usuario de la sesión. `Historial.tecnicoId` es obligatorio, así
+      // que sin este cambio la creación sin técnico no sería posible.
       await tx.historial.create({
         data: {
           equipoId: validatedData.equipoId,
           mantenimientoId: mantenimiento.id,
-          tecnicoId,
+          tecnicoId: session.user.id,
           observaciones: `Mantenimiento ${validatedData.tipo.toLowerCase()} programado: ${validatedData.descripcion}`,
         },
       })
 
-      // Cambiar estado del equipo a EN_MANTENIMIENTO
-      await tx.equipo.update({
-        where: { id: validatedData.equipoId },
-        data: { estado: "EN_MANTENIMIENTO" },
-      })
+      // El equipo entra en mantenimiento solo si el trabajo tiene técnico. Lo
+      // decide el invariante, no esta ruta.
+      await sincronizarEstadoEquipo(tx, validatedData.equipoId)
 
       return mantenimiento
     })
 
-    return NextResponse.json(result, { status: 201 })
+    return NextResponse.json(
+      {
+        ...result,
+        // Señal inmediata para el administrador: el mantenimiento se creó, pero
+        // nadie lo va a atender hasta que se le asigne alguien. La pantalla de
+        // avisos lo recuerda después; esto lo dice en el momento.
+        avisoSinTecnico: result.tecnicoId
+          ? null
+          : "El mantenimiento se creó sin técnico asignado: la empresa del equipo no tiene ninguno activo. Asígnele uno para que alguien lo atienda.",
+      },
+      { status: 201 }
+    )
   } catch (error) {
     if (error instanceof AsignacionError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    if (error instanceof Error && error.name === "ZodError") {
+    if (esErrorDeValidacion(error)) {
+      // El mensaje concreto en lugar del genérico: con el motivo de cancelación
+      // obligatorio, "Datos inválidos" no le dice al usuario qué le falta.
       return NextResponse.json(
-        { error: "Datos inválidos", details: error },
+        {
+          error: mensajeDeValidacion(error),
+          campos: camposConProblema(error),
+        },
         { status: 400 }
       )
     }

@@ -119,16 +119,10 @@ export function Header({ title, description }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {/* Deshabilitado por ahora
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Perfil
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Configuración
-            </DropdownMenuItem>
-            */}
+            {/* La entrada de configuración vive en la barra lateral, que es la
+                que filtra por rol. Repetirla aquí obligaría a duplicar ese
+                filtro, y descomentarla tal cual la habría enseñado a cliente y
+                técnico. El de "Perfil" sigue sin construirse. */}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" />

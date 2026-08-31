@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react"
 import { Header } from "@/components/dashboard/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Bell, AlertTriangle, Clock, Wrench, RefreshCw, Building2, MapPin, Hash, Monitor, User, Search } from "lucide-react"
+import { Bell, AlertTriangle, Clock, Wrench, RefreshCw, Building2, MapPin, Hash, Monitor, User, UserX, Search } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DataPagination } from "@/components/ui/data-pagination"
@@ -40,8 +41,13 @@ interface MantenimientoInfo {
 
 interface Alerta {
   id: string
-  tipo: "ATRASADO" | "PROXIMO" | "CRITICO"
-  prioridad: "ALTA" | "MEDIA" | "BAJA"
+  /**
+   * Abierto a propósito. El servidor puede emitir una categoría que esta
+   * pantalla todavía no conozca; se pinta con la presentación de reserva en
+   * lugar de romper la lista.
+   */
+  tipo: string
+  prioridad: string
   titulo: string
   mensaje: string
   fecha: Date
@@ -55,11 +61,19 @@ interface AlertasData {
     atrasados: number
     proximos: number
     criticos: number
+    /** Solo llega al administrador: es quien puede resolverlos. */
+    sinTecnico?: number
     total: number
   }
 }
 
-const tipoConfig = {
+interface ConfigTipoAlerta {
+  label: string
+  color: string
+  icon: LucideIcon
+}
+
+const tipoConfig: Record<string, ConfigTipoAlerta> = {
   ATRASADO: {
     label: "Atrasado",
     color: "bg-red-500/10 text-red-700 border-red-200",
@@ -75,12 +89,46 @@ const tipoConfig = {
     color: "bg-orange-500/10 text-orange-700 border-orange-200",
     icon: Wrench,
   },
+  SIN_TECNICO: {
+    label: "Sin técnico",
+    color: "bg-purple-500/10 text-purple-700 border-purple-200",
+    icon: UserX,
+  },
 }
 
-const prioridadConfig = {
+/**
+ * Presentación de un tipo de alerta que esta pantalla no conoce.
+ *
+ * El servidor puede empezar a emitir una categoría nueva antes de que se
+ * despliegue la pantalla que la sabe pintar. Sin esta reserva, indexar
+ * `tipoConfig` con una clave desconocida devuelve `undefined` y leer `.icon`
+ * tumba la lista entera: el usuario se queda sin ver ninguna alerta, no solo
+ * sin ver la nueva.
+ */
+const TIPO_DESCONOCIDO: ConfigTipoAlerta = {
+  label: "Aviso",
+  color: "bg-muted text-muted-foreground border-border",
+  icon: Bell,
+}
+
+function configDeTipo(tipo: string): ConfigTipoAlerta {
+  return tipoConfig[tipo] ?? TIPO_DESCONOCIDO
+}
+
+const prioridadConfig: Record<string, { label: string; color: string }> = {
   ALTA: { label: "Alta", color: "bg-red-500/10 text-red-700 border-red-200" },
   MEDIA: { label: "Media", color: "bg-yellow-500/10 text-yellow-700 border-yellow-200" },
   BAJA: { label: "Baja", color: "bg-green-500/10 text-green-700 border-green-200" },
+}
+
+/** Misma reserva que para el tipo: una prioridad desconocida no tumba la lista. */
+const PRIORIDAD_DESCONOCIDA = {
+  label: "Sin prioridad",
+  color: "bg-muted text-muted-foreground border-border",
+}
+
+function configDePrioridad(prioridad: string) {
+  return prioridadConfig[prioridad] ?? PRIORIDAD_DESCONOCIDA
 }
 
 export default function AlertasPage() {
@@ -164,9 +212,19 @@ export default function AlertasPage() {
 
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-7xl space-y-6">
-          {/* Contadores */}
+          {/* Contadores.
+              La quinta tarjeta solo llega al administrador, así que el número
+              de columnas se decide por lo que hay: con cuatro en una rejilla de
+              cinco quedaría un hueco, y con cinco en una de cuatro la última
+              caería sola a una segunda fila. */}
           {data && (
-            <div className="grid gap-4 md:grid-cols-4">
+            <div
+              className={
+                data.contadores.sinTecnico !== undefined
+                  ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-5"
+                  : "grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+              }
+            >
               <Card>
                 <CardHeader className="pb-3">
                   <CardDescription>Total de Alertas</CardDescription>
@@ -191,6 +249,18 @@ export default function AlertasPage() {
                   <CardTitle className="text-3xl text-orange-600">{data.contadores.criticos}</CardTitle>
                 </CardHeader>
               </Card>
+              {/* La categoría solo se sirve al administrador, así que la
+                  tarjeta solo aparece cuando el servidor la manda. */}
+              {data.contadores.sinTecnico !== undefined && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardDescription>Sin Técnico</CardDescription>
+                    <CardTitle className="text-3xl text-purple-600">
+                      {data.contadores.sinTecnico}
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+              )}
             </div>
           )}
 
@@ -232,14 +302,14 @@ export default function AlertasPage() {
                 {/* Filtros de tipo */}
                 <div className="flex gap-2 flex-wrap">
                   <Button
-                    variant={filtroTipo === "all" ? "default" : "outline-solid"}
+                    variant={filtroTipo === "all" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFiltroTipo("all")}
                   >
                     Todas
                   </Button>
                   <Button
-                    variant={filtroTipo === "ATRASADO" ? "default" : "outline-solid"}
+                    variant={filtroTipo === "ATRASADO" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFiltroTipo("ATRASADO")}
                   >
@@ -247,7 +317,7 @@ export default function AlertasPage() {
                     <span className="hidden sm:inline">Atrasados</span>
                   </Button>
                   <Button
-                    variant={filtroTipo === "PROXIMO" ? "default" : "outline-solid"}
+                    variant={filtroTipo === "PROXIMO" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFiltroTipo("PROXIMO")}
                   >
@@ -255,13 +325,23 @@ export default function AlertasPage() {
                     <span className="hidden sm:inline">Próximos</span>
                   </Button>
                   <Button
-                    variant={filtroTipo === "CRITICO" ? "default" : "outline-solid"}
+                    variant={filtroTipo === "CRITICO" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFiltroTipo("CRITICO")}
                   >
                     <Wrench className="h-4 w-4 sm:mr-2" />
                     <span className="hidden sm:inline">Críticos</span>
                   </Button>
+                  {data?.contadores.sinTecnico !== undefined && (
+                    <Button
+                      variant={filtroTipo === "SIN_TECNICO" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setFiltroTipo("SIN_TECNICO")}
+                    >
+                      <UserX className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Sin técnico</span>
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -273,7 +353,8 @@ export default function AlertasPage() {
               ) : alertasPaginadas && alertasPaginadas.length > 0 ? (
                 <div className="space-y-3">
                   {alertasPaginadas.map((alerta) => {
-                    const TipoIcon = tipoConfig[alerta.tipo].icon
+                    const configTipo = configDeTipo(alerta.tipo)
+                    const TipoIcon = configTipo.icon
                     return (
                       <Card key={alerta.id} className="border-l-4" style={{
                         borderLeftColor: alerta.prioridad === "ALTA" ? "#ef4444" : alerta.prioridad === "MEDIA" ? "#f59e0b" : "#22c55e"
@@ -290,11 +371,11 @@ export default function AlertasPage() {
                                   <p className="text-sm text-muted-foreground mt-1">{alerta.mensaje}</p>
                                 </div>
                                 <div className="flex gap-2 shrink-0">
-                                  <Badge variant="outline" className={tipoConfig[alerta.tipo].color}>
-                                    {tipoConfig[alerta.tipo].label}
+                                  <Badge variant="outline" className={configTipo.color}>
+                                    {configTipo.label}
                                   </Badge>
-                                  <Badge variant="outline" className={prioridadConfig[alerta.prioridad].color}>
-                                    {prioridadConfig[alerta.prioridad].label}
+                                  <Badge variant="outline" className={configDePrioridad(alerta.prioridad).color}>
+                                    {configDePrioridad(alerta.prioridad).label}
                                   </Badge>
                                 </div>
                               </div>

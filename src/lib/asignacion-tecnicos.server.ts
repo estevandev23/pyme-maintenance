@@ -3,6 +3,10 @@ import {
   seleccionarTecnico,
   type CandidatoTecnico,
 } from "@/lib/asignacion-tecnicos"
+import {
+  laCancelacionDescuentaCarga,
+  type AutorCancelacionConocido,
+} from "@/lib/cancelacion-solicitud"
 
 /**
  * Cliente Prisma o transacción. Las funciones de este módulo se usan tanto
@@ -12,6 +16,27 @@ export type PrismaEjecutor = Pick<typeof prisma, "user" | "mantenimiento">
 
 /** Estados que cuentan como carga abierta de un técnico. */
 export const ESTADOS_ABIERTOS = ["PROGRAMADO", "EN_PROCESO"] as const
+
+/**
+ * Decide si un mantenimiento cuenta en la carga histórica de su técnico.
+ *
+ * Cuentan todos menos los que canceló otra persona: si el cliente o el
+ * administrador cancelan, el técnico no llegó a hacer el trabajo y vuelve a
+ * competir por el siguiente reparto en las mismas condiciones en que estaba.
+ *
+ * Su propia cancelación sí le cuenta, y no es un detalle: el desempate del
+ * reparto elige a quienes igualan al mejor en ambos contadores y sortea entre
+ * ellos, así que quien vuelve a cero es el mínimo estricto y no hay sorteo.
+ * Descontar siempre convertiría cancelar el trabajo propio en la forma de
+ * garantizarse el siguiente.
+ */
+export function cuentaComoHistorica(
+  estado: string,
+  canceladoPorRol: AutorCancelacionConocido | null | undefined
+): boolean {
+  if (estado !== "CANCELADO") return true
+  return !laCancelacionDescuentaCarga(canceladoPorRol)
+}
 
 /**
  * Error de asignación con un mensaje pensado para llegar tal cual al
@@ -37,6 +62,9 @@ export interface TecnicoConCarga extends CandidatoTecnico {
 /**
  * Devuelve la carga abierta e histórica de cada técnico indicado. Una sola
  * consulta agrupada; los técnicos sin ningún mantenimiento salen en cero.
+ *
+ * La histórica excluye los mantenimientos que canceló otra persona: ver
+ * `cuentaComoHistorica`.
  */
 export async function obtenerCargaPorTecnico(
   db: PrismaEjecutor,
@@ -50,18 +78,30 @@ export async function obtenerCargaPorTecnico(
 
   if (tecnicoIds.length === 0) return carga
 
+  // Se agrupa también por el autor de la cancelación porque es lo que decide si
+  // el mantenimiento cuenta en la histórica. El filtro se aplica al acumular y
+  // no en el `where`: así la regla queda escrita junto a la de carga abierta,
+  // y la consulta sigue teniendo la misma forma que la comparte `/api/usuarios`.
   const grupos = await db.mantenimiento.groupBy({
-    by: ["tecnicoId", "estado"],
+    by: ["tecnicoId", "estado", "canceladoPorRol"],
     where: { tecnicoId: { in: tecnicoIds } },
     _count: { _all: true },
   })
 
   for (const grupo of grupos) {
+    // `tecnicoId` es opcional en el esquema, pero el `where` de arriba acota a
+    // una lista de identificadores, así que aquí nunca es nulo. La guarda está
+    // para que el compilador lo sepa.
+    if (grupo.tecnicoId === null) continue
+
     const contadores = carga.get(grupo.tecnicoId)
     if (!contadores) continue
 
     const total = grupo._count._all
-    contadores.cargaHistorica += total
+
+    if (cuentaComoHistorica(grupo.estado, grupo.canceladoPorRol)) {
+      contadores.cargaHistorica += total
+    }
 
     if ((ESTADOS_ABIERTOS as readonly string[]).includes(grupo.estado)) {
       contadores.cargaAbierta += total
@@ -97,10 +137,26 @@ export async function obtenerCandidatos(
 }
 
 /**
- * Resuelve el técnico que recibe un mantenimiento nuevo cuando el
- * administrador no indicó ninguno.
+ * Resuelve el técnico que recibe un mantenimiento nuevo, o `null` si la empresa
+ * del equipo no tiene ningún candidato.
  *
- * Lanza `AsignacionError` si la empresa no tiene técnicos activos.
+ * Es la variante que usa el flujo normal: la ausencia de técnicos ya no impide
+ * crear el mantenimiento, lo deja a la espera de asignación. Quien necesite que
+ * la falta de candidatos sea un error tiene `asignarTecnicoAutomaticamente`.
+ */
+export async function intentarAsignarTecnico(
+  db: PrismaEjecutor,
+  empresaId: string
+): Promise<TecnicoConCarga | null> {
+  const candidatos = await obtenerCandidatos(db, empresaId)
+  return seleccionarTecnico(candidatos)
+}
+
+/**
+ * Igual que `intentarAsignarTecnico`, pero lanza `AsignacionError` si la
+ * empresa no tiene técnicos activos.
+ *
+ * Se conserva para los caminos donde no tiene sentido seguir sin técnico.
  */
 export async function asignarTecnicoAutomaticamente(
   db: PrismaEjecutor,

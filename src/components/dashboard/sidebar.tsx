@@ -30,6 +30,7 @@ const menuItems: { icon: LucideIcon; label: string; href: string; badge?: boolea
   { icon: History, label: "Historial", href: "/historial" },
   { icon: Bell, label: "Alertas", href: "/alertas", badge: true },
   { icon: Users, label: "Usuarios", href: "/usuarios", roles: ["ADMIN"] },
+  { icon: Settings, label: "Configuración", href: "/configuracion", roles: ["ADMIN"] },
 ]
 
 export function Sidebar() {
@@ -103,23 +104,6 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Settings */}
-        {/* Settings - Deshabilitado por ahora
-        <div className="border-t border-border p-4">
-          <Link
-            href="/configuracion"
-            className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              pathname === "/configuracion"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-          >
-            <Settings className="h-5 w-5" />
-            Configuración
-          </Link>
-        </div>
-        */}
       </div>
     </aside>
   )

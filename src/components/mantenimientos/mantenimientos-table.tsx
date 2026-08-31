@@ -5,6 +5,8 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import Link from "next/link"
 import type { Mantenimiento } from "@/types/mantenimiento"
+import { SIN_TECNICO } from "@/lib/tecnico-asignado"
+import { DIAS_VENTANA_PROXIMIDAD, diasNaturalesHasta } from "@/lib/dias-naturales"
 import {
   Table,
   TableBody,
@@ -62,29 +64,26 @@ const tipoConfig = {
   CORRECTIVO: { label: "Correctivo", color: "bg-orange-500/10 text-orange-700 border-orange-200" },
 }
 
-// Función para calcular el estado de alerta
+// Estado de alerta de un mantenimiento por su fecha.
+//
+// El cálculo de días vive en `@/lib/dias-naturales`, compartido con la ruta de
+// avisos: antes cada lado tenía el suyo y daban resultados distintos para el
+// mismo registro el mismo día.
 function getAlertStatus(mantenimiento: Mantenimiento): { tipo: "ATRASADO" | "PROXIMO" | null; dias: number } {
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-
-  const fechaProgramada = new Date(mantenimiento.fechaProgramada)
-  fechaProgramada.setHours(0, 0, 0, 0)
-
-  const diffTime = fechaProgramada.getTime() - hoy.getTime()
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  const diffDays = diasNaturalesHasta(mantenimiento.fechaProgramada)
 
   // Si ya está completado o cancelado, no hay alerta
   if (mantenimiento.estado === "COMPLETADO" || mantenimiento.estado === "CANCELADO") {
     return { tipo: null, dias: diffDays }
   }
 
-  // Atrasado: fecha pasada y aún no completado
+  // Atrasado: su día ya pasó y sigue abierto
   if (diffDays < 0 && (mantenimiento.estado === "PROGRAMADO" || mantenimiento.estado === "EN_PROCESO")) {
     return { tipo: "ATRASADO", dias: Math.abs(diffDays) }
   }
 
-  // Próximo: en los próximos 3 días y programado
-  if (diffDays >= 0 && diffDays <= 3 && mantenimiento.estado === "PROGRAMADO") {
+  // Próximo: dentro de la ventana y programado
+  if (diffDays >= 0 && diffDays <= DIAS_VENTANA_PROXIMIDAD && mantenimiento.estado === "PROGRAMADO") {
     return { tipo: "PROXIMO", dias: diffDays }
   }
 
@@ -234,8 +233,16 @@ export function MantenimientosTable({
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <div className="flex flex-col">
-                      <span className="text-sm font-medium">{mantenimiento.tecnico.nombre}</span>
-                      <span className="text-xs text-muted-foreground">{mantenimiento.tecnico.email}</span>
+                      {mantenimiento.tecnico ? (
+                        <>
+                          <span className="text-sm font-medium">{mantenimiento.tecnico.nombre}</span>
+                          <span className="text-xs text-muted-foreground">{mantenimiento.tecnico.email}</span>
+                        </>
+                      ) : (
+                        <span className="text-sm font-medium text-muted-foreground italic">
+                          {SIN_TECNICO}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </TableCell>

@@ -6,6 +6,7 @@ import {
   exportEstadisticasToExcel,
 } from "@/lib/excel-export"
 import type { EstadisticasInforme } from "@/lib/estadisticas"
+import { SIN_TECNICO } from "@/lib/tecnico-asignado"
 
 // Mock XLSX module
 jest.mock("xlsx", () => ({
@@ -111,6 +112,30 @@ describe("Excel Export Functions", () => {
       const jsonToSheetCall = (XLSX.utils.json_to_sheet as jest.Mock).mock.calls[0][0]
       expect(jsonToSheetCall[0]["Fecha Realizada"]).toBe("-")
       expect(jsonToSheetCall[0]["Observaciones"]).toBe("-")
+    })
+
+    it("exporta un mantenimiento sin técnico con la etiqueta de ausencia", () => {
+      const mantenimientos = [
+        {
+          tipo: "CORRECTIVO",
+          estado: "PROGRAMADO",
+          equipo: "Servidor Lenovo",
+          empresa: "TechSolutions",
+          tecnico: null,
+          fechaProgramada: "2026-09-02",
+          fechaRealizada: null,
+          descripcion: "El equipo no enciende",
+          observaciones: null,
+        },
+      ]
+
+      exportMantenimientosToExcel(mantenimientos)
+
+      const filas = (XLSX.utils.json_to_sheet as jest.Mock).mock.calls[0][0]
+      expect(filas[0]["Técnico"]).toBe(SIN_TECNICO)
+      // El resto de la fila sigue completo: la ausencia de técnico no la vacía.
+      expect(filas[0]["Equipo"]).toBe("Servidor Lenovo")
+      expect(filas[0]["Descripción"]).toBe("El equipo no enciende")
     })
   })
 

@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx"
+import { SIN_TECNICO } from "@/lib/tecnico-asignado"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import {
@@ -23,7 +24,8 @@ interface ExportMantenimiento {
   estado: string
   equipo: string
   empresa: string
-  tecnico: string
+  /** Nulo mientras el mantenimiento espera técnico. */
+  tecnico: string | null
   fechaProgramada: string
   fechaRealizada: string | null
   descripcion: string
@@ -98,7 +100,7 @@ export function exportMantenimientosToExcel(
     Estado: mant.estado,
     Equipo: mant.equipo,
     Empresa: mant.empresa,
-    Técnico: mant.tecnico,
+    Técnico: mant.tecnico ?? SIN_TECNICO,
     "Fecha Programada": mant.fechaProgramada,
     "Fecha Realizada": mant.fechaRealizada || "-",
     Descripción: mant.descripcion,
@@ -286,7 +288,7 @@ export function exportEstadisticasToExcel(
         : "-",
       Serial: m.equipo?.serial || "-",
       Empresa: m.equipo?.empresa?.nombre || "-",
-      Técnico: m.tecnico?.nombre || "-",
+      Técnico: m.tecnico?.nombre || SIN_TECNICO,
       Tipo: m.tipo,
       Estado: m.estado,
       "Fecha Programada": m.fechaProgramada

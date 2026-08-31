@@ -12,8 +12,11 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
+  Ticket,
 } from "lucide-react"
+import Link from "next/link"
 import type { Mantenimiento } from "@/types/mantenimiento"
+import { SIN_TECNICO, SIN_TECNICO_DETALLE } from "@/lib/tecnico-asignado"
 import {
   Dialog,
   DialogContent,
@@ -150,6 +153,41 @@ export function MantenimientoDetail({
 
           <Separator />
 
+          {/* Solicitud de origen.
+              Solo aparece cuando el mantenimiento nació de una: los que crea el
+              administrador desde el formulario no tienen origen que mostrar. */}
+          {mantenimiento.solicitud && (
+            <>
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Ticket className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold">Solicitud de origen</h3>
+                </div>
+                <div className="p-4 rounded-lg bg-muted/50 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm">
+                      Reportada el{" "}
+                      {format(
+                        new Date(mantenimiento.solicitud.createdAt),
+                        "dd/MM/yyyy",
+                        { locale: es }
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Prioridad indicada por el cliente:{" "}
+                      {mantenimiento.solicitud.prioridad.toLowerCase()}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/solicitudes">Ver solicitudes</Link>
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+            </>
+          )}
+
           {/* Técnico Asignado */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -157,8 +195,17 @@ export function MantenimientoDetail({
               <h3 className="text-sm font-semibold">Técnico Asignado</h3>
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
-              <p className="font-medium">{mantenimiento.tecnico.nombre}</p>
-              <p className="text-sm text-muted-foreground mt-1">{mantenimiento.tecnico.email}</p>
+              {mantenimiento.tecnico ? (
+                <>
+                  <p className="font-medium">{mantenimiento.tecnico.nombre}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{mantenimiento.tecnico.email}</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-muted-foreground italic">{SIN_TECNICO}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{SIN_TECNICO_DETALLE}</p>
+                </>
+              )}
             </div>
           </div>
 

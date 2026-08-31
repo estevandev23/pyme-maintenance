@@ -216,6 +216,10 @@ export async function DELETE(
           select: {
             mantenimientos: true,
             historial: true,
+            // Un cliente con solicitudes tenía una clave foránea restrictiva
+            // que esta comprobación no miraba: el borrado pasaba el guard y
+            // reventaba contra la base con un error interno.
+            solicitudes: true,
           },
         },
       },
@@ -237,13 +241,19 @@ export async function DELETE(
     }
 
     // Verificar si tiene datos relacionados
-    if (usuario._count.mantenimientos > 0 || usuario._count.historial > 0) {
+    if (
+      usuario._count.mantenimientos > 0 ||
+      usuario._count.historial > 0 ||
+      usuario._count.solicitudes > 0
+    ) {
       return NextResponse.json(
         {
-          error: "No se puede eliminar el usuario porque tiene mantenimientos o historial asociado",
+          error:
+            "No se puede eliminar el usuario porque tiene mantenimientos, historial o solicitudes asociadas",
           details: {
             mantenimientos: usuario._count.mantenimientos,
             historial: usuario._count.historial,
+            solicitudes: usuario._count.solicitudes,
           }
         },
         { status: 400 }

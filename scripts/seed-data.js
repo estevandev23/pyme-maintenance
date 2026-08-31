@@ -31,8 +31,18 @@ async function main() {
     await prisma.alerta.deleteMany({
       where: { mantenimiento: { equipoId: { in: equipoIds } } },
     })
-    await prisma.solicitudServicio.deleteMany({ where: { equipoId: { in: equipoIds } } })
+    // Los mantenimientos van ANTES que las solicitudes.
+    //
+    // `Mantenimiento.solicitudId` es una clave foránea con borrado restringido:
+    // Postgres la comprueba de inmediato, no al final de la sentencia, así que
+    // borrar una solicitud que ya generó un mantenimiento aborta. Y como estas
+    // líneas no van en una transacción, al reventar dejarían el historial y las
+    // alertas ya borrados y la base a medio limpiar, sin que reejecutar el
+    // script lo arregle.
+    //
+    // Al revés no hay problema: la clave vive en el lado del mantenimiento.
     await prisma.mantenimiento.deleteMany({ where: { equipoId: { in: equipoIds } } })
+    await prisma.solicitudServicio.deleteMany({ where: { equipoId: { in: equipoIds } } })
     await prisma.equipo.deleteMany({ where: { id: { in: equipoIds } } })
     console.log(`   ${equipoIds.length} equipos anteriores retirados con lo que colgaba de ellos`)
   }
@@ -48,7 +58,7 @@ async function main() {
         nit: '900123456-1',
         contacto: 'Carlos Mendoza',
         telefono: '3001234567',
-        email: 'info@techsolutions.com',
+        email: 'info@techsolutions.example',
         direccion: 'Calle 100 #15-20, Bogotá',
       },
     }),
@@ -60,7 +70,7 @@ async function main() {
         nit: '900234567-2',
         contacto: 'María Rodríguez',
         telefono: '3107654321',
-        email: 'contacto@innovatech.com',
+        email: 'contacto@innovatech.example',
         direccion: 'Av. El Poblado #45-67, Medellín',
       },
     }),
@@ -72,7 +82,7 @@ async function main() {
         nit: '900345678-3',
         contacto: 'Juan Pérez',
         telefono: '3209876543',
-        email: 'soporte@datacenter.co',
+        email: 'soporte@datacenter.example',
         direccion: 'Carrera 7 #32-16, Cali',
       },
     }),
@@ -84,7 +94,7 @@ async function main() {
         nit: '900456789-4',
         contacto: 'Laura Martínez',
         telefono: '3156789012',
-        email: 'info@sistemasintegrados.com',
+        email: 'info@sistemasintegrados.example',
         direccion: 'Calle 45 #23-45, Barranquilla',
       },
     }),
@@ -97,10 +107,10 @@ async function main() {
   const hashedPassword = await bcrypt.hash('password123', 10)
 
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@mantenpro.com' },
+    where: { email: 'admin@mantenpro.example' },
     update: {},
     create: {
-      email: 'admin@mantenpro.com',
+      email: 'admin@mantenpro.example',
       password: hashedPassword,
       nombre: 'Administrador Sistema',
       role: 'ADMIN',
@@ -112,14 +122,14 @@ async function main() {
   // entre los de la empresa del equipo. Se crean dos por empresa para que ese
   // reparto por menor carga tenga entre quién elegir.
   const tecnicosSemilla = [
-    { email: 'tecnico1@mantenpro.com', nombre: 'Pedro Ramírez', empresa: 0 },
-    { email: 'tecnico2@mantenpro.com', nombre: 'Ana García', empresa: 0 },
-    { email: 'tecnico3@mantenpro.com', nombre: 'Luis Torres', empresa: 1 },
-    { email: 'tecnico4@mantenpro.com', nombre: 'Marta Ruiz', empresa: 1 },
-    { email: 'tecnico5@mantenpro.com', nombre: 'Jorge Peña', empresa: 2 },
-    { email: 'tecnico6@mantenpro.com', nombre: 'Elena Vargas', empresa: 2 },
-    { email: 'tecnico7@mantenpro.com', nombre: 'Iván Duarte', empresa: 3 },
-    { email: 'tecnico8@mantenpro.com', nombre: 'Rocío Nieto', empresa: 3 },
+    { email: 'tecnico1@mantenpro.example', nombre: 'Pedro Ramírez', empresa: 0 },
+    { email: 'tecnico2@mantenpro.example', nombre: 'Ana García', empresa: 0 },
+    { email: 'tecnico3@mantenpro.example', nombre: 'Luis Torres', empresa: 1 },
+    { email: 'tecnico4@mantenpro.example', nombre: 'Marta Ruiz', empresa: 1 },
+    { email: 'tecnico5@mantenpro.example', nombre: 'Jorge Peña', empresa: 2 },
+    { email: 'tecnico6@mantenpro.example', nombre: 'Elena Vargas', empresa: 2 },
+    { email: 'tecnico7@mantenpro.example', nombre: 'Iván Duarte', empresa: 3 },
+    { email: 'tecnico8@mantenpro.example', nombre: 'Rocío Nieto', empresa: 3 },
   ]
 
   const tecnicos = await Promise.all(
@@ -149,19 +159,27 @@ async function main() {
     tecnicosPorEmpresa.set(tecnico.empresaId, lista)
   }
 
-  /** Elige un técnico de la empresa del equipo, repartiendo de forma pareja. */
+  /**
+   * Elige un técnico de la empresa del equipo, repartiendo de forma pareja.
+   *
+   * Devuelve `null` si la empresa no tiene ninguno. Antes el módulo sobre una
+   * lista vacía daba NaN, `candidatos[NaN]` era `undefined` y el script moría al
+   * leer su identificador: justo al intentar sembrar el caso que hace falta para
+   * probar el mantenimiento sin técnico.
+   */
   let turnoTecnico = 0
   const tecnicoPara = (equipo) => {
     const candidatos = tecnicosPorEmpresa.get(equipo.empresaId) || []
+    if (candidatos.length === 0) return null
     return candidatos[turnoTecnico++ % candidatos.length]
   }
 
   const clientes = await Promise.all([
     prisma.user.upsert({
-      where: { email: 'cliente1@techsolutions.com' },
+      where: { email: 'cliente1@techsolutions.example' },
       update: {},
       create: {
-        email: 'cliente1@techsolutions.com',
+        email: 'cliente1@techsolutions.example',
         password: hashedPassword,
         nombre: 'Roberto Silva',
         role: 'CLIENTE',
@@ -170,10 +188,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'cliente2@innovatech.com' },
+      where: { email: 'cliente2@innovatech.example' },
       update: {},
       create: {
-        email: 'cliente2@innovatech.com',
+        email: 'cliente2@innovatech.example',
         password: hashedPassword,
         nombre: 'Sandra López',
         role: 'CLIENTE',
@@ -182,10 +200,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'cliente3@datacenter.co' },
+      where: { email: 'cliente3@datacenter.example' },
       update: {},
       create: {
-        email: 'cliente3@datacenter.co',
+        email: 'cliente3@datacenter.example',
         password: hashedPassword,
         nombre: 'Miguel Ángel Castro',
         role: 'CLIENTE',
@@ -194,10 +212,10 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'cliente4@sistemasintegrados.com' },
+      where: { email: 'cliente4@sistemasintegrados.example' },
       update: {},
       create: {
-        email: 'cliente4@sistemasintegrados.com',
+        email: 'cliente4@sistemasintegrados.example',
         password: hashedPassword,
         nombre: 'Patricia Gómez',
         role: 'CLIENTE',
@@ -208,9 +226,9 @@ async function main() {
   ])
 
   console.log(`✅ ${1 + tecnicos.length + clientes.length} usuarios creados`)
-  console.log('   - Usuario: admin@mantenpro.com / password123')
-  console.log(`   - Técnicos: tecnico1..${tecnicos.length}@mantenpro.com / password123 (dos por empresa)`)
-  console.log('   - Clientes: cliente1@techsolutions.com, cliente2@innovatech.com, etc. / password123')
+  console.log('   - Usuario: admin@mantenpro.example / password123')
+  console.log(`   - Técnicos: tecnico1..${tecnicos.length}@mantenpro.example / password123 (dos por empresa)`)
+  console.log('   - Clientes: cliente1@techsolutions.example, cliente2@innovatech.example, etc. / password123')
 
   // Crear equipos
   console.log('💻 Creando equipos...')
@@ -218,7 +236,15 @@ async function main() {
 
   const tiposEquipo = ['Computador de Escritorio', 'Laptop', 'Servidor', 'Impresora', 'Router', 'Switch', 'Firewall']
   const marcas = ['Dell', 'HP', 'Lenovo', 'Cisco', 'Epson', 'Canon', 'Fortinet']
-  const estados = ['ACTIVO', 'ACTIVO', 'ACTIVO', 'ACTIVO', 'EN_MANTENIMIENTO', 'INACTIVO']
+
+  // Los equipos nacen ACTIVO. Su estado NO se sortea: se deriva al final de los
+  // mantenimientos que se les hayan creado.
+  //
+  // Antes se elegía al azar de una lista que incluía EN_MANTENIMIENTO, y como
+  // eso ocurría ANTES de crear ningún mantenimiento, la base sembrada violaba
+  // el invariante desde el primer momento: había equipos en mantenimiento sin
+  // trabajo abierto y equipos activos con trabajo pendiente. Verificar la regla
+  // a ojo sobre esos datos daba falsos positivos y falsos negativos.
 
   for (let i = 0; i < empresas.length; i++) {
     const empresa = empresas[i]
@@ -232,7 +258,7 @@ async function main() {
           marca: marcas[tipoIndex],
           modelo: `Modelo-${Math.floor(Math.random() * 9000) + 1000}`,
           serial: `SN-${empresa.nit.substring(0, 6)}-${Date.now()}-${j}`,
-          estado: estados[Math.floor(Math.random() * estados.length)],
+          estado: 'ACTIVO',
           ubicacion: `Oficina ${Math.floor(Math.random() * 5) + 1}`,
           empresaId: empresa.id,
         },
@@ -339,16 +365,122 @@ async function main() {
   console.log(`✅ ${mantenimientos.length} mantenimientos creados`)
   console.log(`✅ ${mantenimientos.length} entradas de historial creadas`)
 
+  // Solicitudes de servicio, con su mantenimiento.
+  //
+  // Antes el script no sembraba ninguna, así que el flujo nuevo —la solicitud
+  // que crea su mantenimiento, el enlace entre ambos, la cancelación— no se
+  // podía ver funcionando sin crearlas a mano.
+  //
+  // Se crean con `solicitudId` puesto en el mantenimiento porque el enlace es lo
+  // que hace reproducible el caso; y una de ellas se deja SIN técnico para poder
+  // ver el mantenimiento huérfano sin tener que desactivar técnicos a mano.
+  console.log('🎫 Creando solicitudes de servicio...')
+  const solicitudes = []
+
+  const guionSolicitudes = [
+    { descripcion: 'El equipo no enciende desde ayer por la mañana', prioridad: 'ALTA', conTecnico: true },
+    { descripcion: 'Hace un ruido fuerte al arrancar y se apaga solo', prioridad: 'URGENTE', conTecnico: true },
+    { descripcion: 'La impresora atasca el papel constantemente', prioridad: 'MEDIA', conTecnico: true },
+    { descripcion: 'Va muy lento desde la última actualización', prioridad: 'BAJA', conTecnico: false },
+  ]
+
+  const diasAdelanto = 3
+
+  for (let i = 0; i < guionSolicitudes.length; i++) {
+    const guion = guionSolicitudes[i]
+    const cliente = clientes[i % clientes.length]
+    // El equipo tiene que ser de la empresa del cliente: es lo que el sistema
+    // exige, y sembrar lo contrario dejaría datos que el código considera
+    // imposibles.
+    const equipoDelCliente = equipos.find((e) => e.empresaId === cliente.empresaId)
+    if (!equipoDelCliente) continue
+
+    const tecnico = guion.conTecnico ? tecnicoPara(equipoDelCliente) : null
+
+    const fechaProgramada = new Date()
+    fechaProgramada.setDate(fechaProgramada.getDate() + diasAdelanto)
+    fechaProgramada.setHours(0, 0, 0, 0)
+
+    const solicitud = await prisma.solicitudServicio.create({
+      data: {
+        equipoId: equipoDelCliente.id,
+        clienteId: cliente.id,
+        descripcion: guion.descripcion,
+        prioridad: guion.prioridad,
+        estado: 'APROBADA',
+      },
+    })
+
+    const mantenimiento = await prisma.mantenimiento.create({
+      data: {
+        equipoId: equipoDelCliente.id,
+        solicitudId: solicitud.id,
+        tecnicoId: tecnico ? tecnico.id : null,
+        tipo: 'CORRECTIVO',
+        estado: 'PROGRAMADO',
+        fechaProgramada,
+        descripcion: guion.descripcion,
+      },
+    })
+
+    // El asiento se firma con quien provoca la creación, que aquí es el cliente.
+    await prisma.historial.create({
+      data: {
+        equipoId: equipoDelCliente.id,
+        mantenimientoId: mantenimiento.id,
+        tecnicoId: cliente.id,
+        observaciones: tecnico
+          ? `Mantenimiento correctivo creado desde una solicitud y asignado a ${tecnico.nombre}: ${guion.descripcion}`
+          : `Mantenimiento correctivo creado desde una solicitud, a la espera de técnico: ${guion.descripcion}`,
+      },
+    })
+
+    solicitudes.push(solicitud)
+    mantenimientos.push(mantenimiento)
+  }
+
+  console.log(`✅ ${solicitudes.length} solicitudes creadas con su mantenimiento`)
+
+  // Estado de los equipos, derivado del trabajo que tienen.
+  //
+  // El invariante del sistema es: un equipo figura en mantenimiento si y solo si
+  // tiene al menos un mantenimiento abierto CON técnico. Derivarlo aquí, en vez
+  // de sortearlo antes de crear los mantenimientos, es lo que hace que la base
+  // sembrada sirva para comprobar la regla a ojo.
+  console.log('🔄 Derivando el estado de los equipos de su trabajo abierto...')
+  let enMantenimiento = 0
+
+  for (const equipo of equipos) {
+    const abiertosConTecnico = await prisma.mantenimiento.count({
+      where: {
+        equipoId: equipo.id,
+        estado: { in: ['PROGRAMADO', 'EN_PROCESO'] },
+        tecnicoId: { not: null },
+      },
+    })
+
+    if (abiertosConTecnico > 0) {
+      await prisma.equipo.update({
+        where: { id: equipo.id },
+        data: { estado: 'EN_MANTENIMIENTO' },
+      })
+      enMantenimiento += 1
+    }
+  }
+
+  console.log(`✅ ${enMantenimiento} equipos en mantenimiento, ${equipos.length - enMantenimiento} activos`)
+
   console.log('\n🎉 ¡Seed completado exitosamente!')
   console.log('\n📊 Resumen:')
   console.log(`   - ${empresas.length} empresas`)
   console.log(`   - ${1 + tecnicos.length + clientes.length} usuarios`)
   console.log(`   - ${equipos.length} equipos`)
   console.log(`   - ${mantenimientos.length} mantenimientos`)
+  console.log(`   - ${solicitudes.length} solicitudes (una de ellas sin técnico, a propósito)`)
   console.log('\n🔑 Credenciales de acceso:')
-  console.log('   Admin: admin@mantenpro.com / password123')
-  console.log('   Técnico: tecnico1@mantenpro.com / password123')
-  console.log('   Cliente: cliente1@techsolutions.com / password123')
+  console.log('   Admin: admin@mantenpro.example / password123')
+  console.log('   Técnico: tecnico1@mantenpro.example / password123')
+  console.log('   Cliente: cliente1@techsolutions.example / password123')
 }
 
 main()

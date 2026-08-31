@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge"
+import { SIN_TECNICO } from "@/lib/tecnico-asignado"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -17,9 +18,10 @@ interface Mantenimiento {
       nombre: string
     }
   }
+  /** Nulo mientras el mantenimiento espera técnico. */
   tecnico: {
     nombre: string
-  }
+  } | null
 }
 
 interface MaintenanceTableProps {
@@ -84,7 +86,13 @@ export function MaintenanceTable({ data = defaultData }: MaintenanceTableProps) 
               <TableCell className="text-muted-foreground">
                 {item.equipo.empresa.nombre}
               </TableCell>
-              <TableCell className="text-muted-foreground">{item.tecnico.nombre}</TableCell>
+              <TableCell className="text-muted-foreground">
+                {item.tecnico ? (
+                  item.tecnico.nombre
+                ) : (
+                  <span className="italic">{SIN_TECNICO}</span>
+                )}
+              </TableCell>
               <TableCell>
                 <Badge variant="outline" className={estadoConfig[item.estado]?.color || "bg-muted"}>
                   {estadoConfig[item.estado]?.label || item.estado}

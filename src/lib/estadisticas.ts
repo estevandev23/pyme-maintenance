@@ -243,7 +243,8 @@ export interface ProximoMantenimiento {
     serial: string
     empresa: { nombre: string }
   }
-  tecnico: { nombre: string }
+  /** Nulo mientras el mantenimiento espera técnico. */
+  tecnico: { nombre: string } | null
 }
 
 /**

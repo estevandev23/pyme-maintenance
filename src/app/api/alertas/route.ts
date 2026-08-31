@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  DIAS_VENTANA_PROXIMIDAD,
+  diasNaturalesHasta,
+  ventanaDeProximidad,
+} from "@/lib/dias-naturales"
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,18 +29,26 @@ export async function GET(request: NextRequest) {
       mantenimientosWhere = { tecnicoId: userId }
     }
 
+    // El criterio es por DÍA NATURAL, no por instante.
+    //
+    // Antes se comparaba contra `new Date()` sin normalizar, así que un
+    // mantenimiento programado para hoy quedaba por debajo de «ahora» en cuanto
+    // pasaba un segundo y salía como «atrasado por 0 día(s)», en rojo y con
+    // prioridad alta, mientras el listado de mantenimientos —que sí compara por
+    // días— lo pintaba en amarillo como «programado para hoy». Dos pantallas
+    // contradiciéndose sobre el mismo registro el mismo día.
     const hoy = new Date()
-    const tresDiasAdelante = new Date(hoy)
-    tresDiasAdelante.setDate(tresDiasAdelante.getDate() + 3)
+    const { desde: comienzoDeHoy, hasta: finDeLaVentana } =
+      ventanaDeProximidad(DIAS_VENTANA_PROXIMIDAD, hoy)
 
-    // Mantenimientos próximos a vencer (próximos 3 días)
+    // Mantenimientos próximos a vencer: desde hoy hasta el final de la ventana.
     const proximosAVencer = await prisma.mantenimiento.findMany({
       where: {
         ...mantenimientosWhere,
         estado: "PROGRAMADO",
         fechaProgramada: {
-          gte: hoy,
-          lte: tresDiasAdelante,
+          gte: comienzoDeHoy,
+          lte: finDeLaVentana,
         },
       },
       include: {
@@ -70,8 +83,10 @@ export async function GET(request: NextRequest) {
         estado: {
           in: ["PROGRAMADO", "EN_PROCESO"],
         },
+        // Atrasado es «su día ya pasó», no «su instante ya pasó». Quien tiene
+        // el trabajo programado para hoy tiene todo el día para hacerlo.
         fechaProgramada: {
-          lt: hoy,
+          lt: comienzoDeHoy,
         },
       },
       include: {
@@ -121,6 +136,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Mantenimientos abiertos que esperan técnico.
+    //
+    // Solo se consultan para el ADMIN: es el único que puede resolverlos. Para
+    // los demás roles la lista queda vacía sin necesidad de ir a la base.
+    const sinTecnico =
+      userRole === "ADMIN"
+        ? await prisma.mantenimiento.findMany({
+            where: {
+              tecnicoId: null,
+              estado: { in: ["PROGRAMADO", "EN_PROCESO"] },
+            },
+            include: {
+              equipo: {
+                select: {
+                  tipo: true,
+                  marca: true,
+                  modelo: true,
+                  serial: true,
+                  empresa: { select: { nombre: true } },
+                },
+              },
+              tecnico: { select: { nombre: true } },
+            },
+            orderBy: { fechaProgramada: "asc" },
+          })
+        : []
+
     const equiposCriticos = await prisma.equipo.findMany({
       where: equiposWhere,
       include: {
@@ -138,9 +180,7 @@ export async function GET(request: NextRequest) {
 
     // Alertas de mantenimientos atrasados
     for (const mant of atrasados) {
-      const diasAtrasado = Math.floor(
-        (hoy.getTime() - new Date(mant.fechaProgramada).getTime()) / (1000 * 60 * 60 * 24)
-      )
+      const diasAtrasado = Math.abs(diasNaturalesHasta(mant.fechaProgramada, hoy))
       alertas.push({
         id: `atrasado-${mant.id}`,
         tipo: "ATRASADO",
@@ -154,9 +194,7 @@ export async function GET(request: NextRequest) {
 
     // Alertas de mantenimientos próximos
     for (const mant of proximosAVencer) {
-      const diasRestantes = Math.ceil(
-        (new Date(mant.fechaProgramada).getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24)
-      )
+      const diasRestantes = diasNaturalesHasta(mant.fechaProgramada, hoy)
       alertas.push({
         id: `proximo-${mant.id}`,
         tipo: "PROXIMO",
@@ -181,6 +219,26 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Alertas de mantenimientos sin técnico asignado.
+    //
+    // Solo para el administrador: es él quien puede resolverlas. Al cliente no
+    // se le presenta como una incidencia suya —no puede hacer nada— y al
+    // técnico no le corresponde trabajo que no tiene asignado.
+    //
+    // La alerta es derivada, como las otras tres: desaparece sola en cuanto se
+    // asigne un técnico, sin ningún estado que mantener sincronizado.
+    for (const mant of sinTecnico) {
+      alertas.push({
+        id: `sin-tecnico-${mant.id}`,
+        tipo: "SIN_TECNICO",
+        prioridad: "ALTA",
+        titulo: "Mantenimiento sin técnico",
+        mensaje: `El mantenimiento ${mant.tipo.toLowerCase()} del equipo ${mant.equipo.tipo} espera técnico: la empresa no tenía ninguno disponible al crearlo`,
+        mantenimiento: mant,
+        fecha: mant.fechaProgramada,
+      })
+    }
+
     // Ordenar alertas por prioridad y fecha
     alertas.sort((a, b) => {
       const prioridadOrden: Record<string, number> = { ALTA: 0, MEDIA: 1, BAJA: 2 }
@@ -196,6 +254,7 @@ export async function GET(request: NextRequest) {
         atrasados: atrasados.length,
         proximos: proximosAVencer.length,
         criticos: equiposCriticos.length,
+        sinTecnico: sinTecnico.length,
         total: alertas.length,
       },
     })

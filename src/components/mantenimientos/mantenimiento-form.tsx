@@ -46,8 +46,22 @@ import {
 /**
  * Valor centinela del selector de técnico: delega la elección en el reparto
  * automático del servidor. Se traduce a "sin técnico" al enviar.
+ *
+ * Solo se ofrece al CREAR: al editar, el campo ausente significaría "no toques
+ * el técnico", no "vuelve a repartir".
  */
 const ASIGNACION_AUTOMATICA = "__automatica__"
+
+/**
+ * Valor centinela para dejar el mantenimiento sin técnico.
+ *
+ * Solo se ofrece al EDITAR, y es una acción distinta de la asignación
+ * automática aunque ambas acaben en "no hay técnico": pedir reparto es
+ * delegar la elección, retirarlo es dejar el trabajo a la espera. Se traducen
+ * a cosas distintas en el cuerpo de la petición —campo ausente frente a campo
+ * vacío— porque el servidor no podría distinguirlas de otro modo.
+ */
+const RETIRAR_TECNICO = "__retirar__"
 
 interface MantenimientoFormProps {
   mantenimiento?: Mantenimiento
@@ -59,10 +73,6 @@ interface MantenimientoFormProps {
   onSubmit: (data: MantenimientoInput) => Promise<void>
   isLoading: boolean
   clienteEmpresaId?: string
-  prefillData?: {
-    equipoId?: string
-    descripcion?: string
-  }
 }
 
 /** La API devuelve las fechas como cadena ISO; el formulario solo quiere el día. */
@@ -80,7 +90,6 @@ export function MantenimientoForm({
   onSubmit,
   isLoading,
   clienteEmpresaId,
-  prefillData,
 }: MantenimientoFormProps) {
   const [fechaProgramadaOpen, setFechaProgramadaOpen] = useState(false)
   const [fechaRealizadaOpen, setFechaRealizadaOpen] = useState(false)
@@ -107,7 +116,10 @@ export function MantenimientoForm({
     if (mantenimiento) {
       form.reset({
         equipoId: mantenimiento.equipoId,
-        tecnicoId: mantenimiento.tecnicoId,
+        // Un mantenimiento sin técnico abre el selector en la opción de
+        // retirada, que es la que describe su estado actual. Meter el nulo
+        // dejaría el selector en un estado inválido y sin etiqueta.
+        tecnicoId: mantenimiento.tecnicoId ?? RETIRAR_TECNICO,
         tipo: mantenimiento.tipo,
         estado: mantenimiento.estado,
         fechaProgramada: soloFecha(mantenimiento.fechaProgramada),
@@ -119,22 +131,6 @@ export function MantenimientoForm({
         reporteUrl: mantenimiento.reporteUrl,
       })
       setSelectedEmpresaId(mantenimiento.equipo.empresa.id)
-    } else if (prefillData && open) {
-      form.reset({
-        equipoId: prefillData.equipoId || "",
-        tecnicoId: ASIGNACION_AUTOMATICA,
-        tipo: "CORRECTIVO", // Por defecto correctivo si viene de una falla
-        estado: "PROGRAMADO",
-        fechaProgramada: new Date().toISOString().split('T')[0],
-        fechaRealizada: null,
-        descripcion: prefillData.descripcion || "",
-        observaciones: null,
-        reporteUrl: null,
-      })
-      const equipo = equipos.find(e => e.id === prefillData.equipoId)
-      if (equipo) {
-        setSelectedEmpresaId(equipo.empresaId)
-      }
     } else if (open) {
       form.reset({
         equipoId: "",
@@ -149,7 +145,7 @@ export function MantenimientoForm({
       })
       setSelectedEmpresaId(clienteEmpresaId || "")
     }
-  }, [mantenimiento, form, open, clienteEmpresaId, prefillData, equipos])
+  }, [mantenimiento, form, open, clienteEmpresaId])
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -206,7 +202,12 @@ export function MantenimientoForm({
     // dispara el reparto automático.
     await onSubmit({
       ...data,
-      tecnicoId: data.tecnicoId === ASIGNACION_AUTOMATICA ? undefined : data.tecnicoId,
+      tecnicoId:
+        data.tecnicoId === ASIGNACION_AUTOMATICA
+          ? undefined
+          : data.tecnicoId === RETIRAR_TECNICO
+            ? null
+            : data.tecnicoId,
     })
     form.reset()
     setSelectedFile(null)
@@ -336,6 +337,11 @@ export function MantenimientoForm({
                       {!mantenimiento && (
                         <SelectItem value={ASIGNACION_AUTOMATICA}>
                           Asignación automática (técnico con menos carga)
+                        </SelectItem>
+                      )}
+                      {mantenimiento && (
+                        <SelectItem value={RETIRAR_TECNICO}>
+                          Dejar sin técnico asignado
                         </SelectItem>
                       )}
                       {filteredTecnicos.length > 0 ? (

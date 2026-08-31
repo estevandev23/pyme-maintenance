@@ -1,4 +1,5 @@
 import jsPDF from "jspdf"
+import { SIN_TECNICO } from "@/lib/tecnico-asignado"
 import autoTable from "jspdf-autotable"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -72,7 +73,8 @@ interface FilaMantenimiento {
   estado: string
   equipo: string
   empresa: string
-  tecnico: string
+  /** Nulo mientras el mantenimiento espera técnico. */
+  tecnico: string | null
   fechaProgramada: string
   fechaRealizada: string | null
 }
@@ -150,7 +152,7 @@ export function exportMantenimientosToPDF(mantenimientos: FilaMantenimiento[]) {
     mant.estado,
     mant.equipo,
     mant.empresa,
-    mant.tecnico,
+    mant.tecnico ?? SIN_TECNICO,
     mant.fechaProgramada,
     mant.fechaRealizada || "-",
   ])
@@ -368,7 +370,7 @@ export function exportEstadisticasToPDF(stats: EstadisticasInforme) {
         ? `${m.equipo.tipo} ${m.equipo.marca} ${m.equipo.modelo || ""}`.trim()
         : "-",
       m.equipo?.empresa?.nombre || "-",
-      m.tecnico?.nombre || "-",
+      m.tecnico?.nombre || SIN_TECNICO,
       m.tipo,
       m.estado,
       m.fechaProgramada

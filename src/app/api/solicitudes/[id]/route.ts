@@ -2,7 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  camposConProblema,
+  esErrorDeValidacion,
+  mensajeDeValidacion,
+} from "@/lib/respuesta-validacion"
 import { updateSolicitudSchema } from "@/lib/validations/solicitud"
+import { Prisma } from "@prisma/client"
+import { cancelarMantenimiento } from "@/lib/cancelar.server"
+import {
+  decidirCancelacionCliente,
+  type EstadoMantenimientoConocido,
+} from "@/lib/cancelacion-solicitud"
+import { MOTIVO_CANCELACION_REQUERIDO } from "@/lib/validations/mantenimiento"
 
 // GET /api/solicitudes/[id] - Obtener solicitud por ID
 export async function GET(
@@ -86,6 +98,9 @@ export async function PUT(
 
     const existingSolicitud = await prisma.solicitudServicio.findUnique({
       where: { id },
+      // El mantenimiento enlazado hace falta para decidir si el cliente todavía
+      // puede cancelar: la puerta es su estado, no el de la solicitud.
+      include: { mantenimiento: { select: { id: true, estado: true } } },
     })
 
     if (!existingSolicitud) {
@@ -95,11 +110,18 @@ export async function PUT(
       )
     }
 
-    // ADMIN puede cambiar estado y agregar respuesta
+    // ADMIN: puede dejar una respuesta, pero ya no mueve el estado a mano.
+    //
+    // Las transiciones que provocaba —aprobar, rechazar, marcar en revisión—
+    // desaparecen con el flujo de aprobación. Dejarlas abiertas permitiría poner
+    // en RECHAZADA una solicitud cuyo mantenimiento está en curso con un técnico
+    // trabajando, sin que nada propague nada en ninguna dirección. El estado lo
+    // decide ahora lo que le ocurra al mantenimiento: se aprueba al crearlo, se
+    // cancela al cancelarlo y vuelve a pendiente al eliminarlo.
     if (session.user.role === "ADMIN") {
       const solicitud = await prisma.solicitudServicio.update({
         where: { id },
-        data: validatedData,
+        data: { respuesta: validatedData.respuesta },
         include: {
           equipo: {
             select: {
@@ -129,22 +151,48 @@ export async function PUT(
       return NextResponse.json(solicitud)
     }
 
-    // CLIENTE solo puede cancelar (rechazar) si está PENDIENTE
+    // CLIENTE: solo puede cancelar su propia solicitud, y solo mientras el
+    // técnico no haya empezado.
+    //
+    // La puerta es el estado del MANTENIMIENTO, no el de la solicitud. Antes se
+    // exigía que la solicitud estuviera PENDIENTE, y con la creación automática
+    // ninguna llega a estarlo: esa condición se habría vuelto inalcanzable y el
+    // cliente se habría quedado sin poder cancelar nada.
     if (session.user.role === "CLIENTE") {
       if (existingSolicitud.clienteId !== session.user.id) {
         return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
       }
 
-      if (existingSolicitud.estado !== "PENDIENTE") {
+      const decision = decidirCancelacionCliente(
+        existingSolicitud.mantenimiento?.estado as EstadoMantenimientoConocido | null
+      )
+
+      if (!decision.permitida) {
+        return NextResponse.json({ error: decision.motivo }, { status: 409 })
+      }
+
+      const motivo = validatedData.motivoCancelacion?.trim()
+
+      if (!motivo) {
         return NextResponse.json(
-          { error: "Solo puede cancelar solicitudes pendientes" },
+          { error: MOTIVO_CANCELACION_REQUERIDO, campos: ["motivoCancelacion"] },
           { status: 400 }
         )
       }
 
-      const solicitud = await prisma.solicitudServicio.update({
+      await prisma.$transaction(async (tx) => {
+        await cancelarMantenimiento(tx, {
+          mantenimientoId: existingSolicitud.mantenimiento!.id,
+          equipoId: existingSolicitud.equipoId,
+          solicitudId: existingSolicitud.id,
+          motivo,
+          autorId: session.user.id,
+          autorRol: "CLIENTE",
+        })
+      })
+
+      const solicitud = await prisma.solicitudServicio.findUniqueOrThrow({
         where: { id },
-        data: { estado: "RECHAZADA", respuesta: "Cancelada por el cliente" },
         include: {
           equipo: {
             select: {
@@ -176,9 +224,14 @@ export async function PUT(
 
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
   } catch (error) {
-    if (error instanceof Error && error.name === "ZodError") {
+    if (esErrorDeValidacion(error)) {
+      // El mensaje concreto en lugar del genérico: con el motivo de cancelación
+      // obligatorio, "Datos inválidos" no le dice al usuario qué le falta.
       return NextResponse.json(
-        { error: "Datos inválidos", details: error },
+        {
+          error: mensajeDeValidacion(error),
+          campos: camposConProblema(error),
+        },
         { status: 400 }
       )
     }
@@ -211,6 +264,7 @@ export async function DELETE(
 
     const solicitud = await prisma.solicitudServicio.findUnique({
       where: { id },
+      select: { id: true, mantenimiento: { select: { id: true } } },
     })
 
     if (!solicitud) {
@@ -220,12 +274,42 @@ export async function DELETE(
       )
     }
 
+    // La clave foránea del enlace ya impide este borrado, pero lo haría con un
+    // error de base de datos que acabaría en un 500 genérico. Se comprueba antes
+    // para poder explicar el motivo, como hacen los borrados de equipos y
+    // usuarios.
+    if (solicitud.mantenimiento) {
+      return NextResponse.json(
+        {
+          error:
+            "No se puede eliminar la solicitud porque tiene un mantenimiento registrado. Elimine primero el mantenimiento.",
+          details: { mantenimientoId: solicitud.mantenimiento.id },
+        },
+        { status: 409 }
+      )
+    }
+
     await prisma.solicitudServicio.delete({
       where: { id },
     })
 
     return NextResponse.json({ message: "Solicitud eliminada exitosamente" })
   } catch (error) {
+    // Red de seguridad por si dos peticiones simultáneas superan la
+    // comprobación anterior: la restricción salta y se traduce al mismo mensaje.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "No se puede eliminar la solicitud porque tiene un mantenimiento registrado. Elimine primero el mantenimiento.",
+        },
+        { status: 409 }
+      )
+    }
+
     console.error("Error al eliminar solicitud:", error)
     return NextResponse.json(
       { error: "Error al eliminar solicitud" },

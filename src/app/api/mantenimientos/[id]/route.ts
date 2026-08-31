@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  camposConProblema,
+  esErrorDeValidacion,
+  mensajeDeValidacion,
+} from "@/lib/respuesta-validacion"
 import { decidirCambioDeEquipo } from "@/lib/edicion-mantenimiento"
+import { sincronizarEstadoEquipo } from "@/lib/estado-equipo.server"
+import { cancelarMantenimiento } from "@/lib/cancelar.server"
+import type { AutorCancelacionConocido } from "@/lib/cancelacion-solicitud"
+import { MOTIVO_CANCELACION_REQUERIDO } from "@/lib/validations/mantenimiento"
 import { Prisma } from "@prisma/client"
 import { updateMantenimientoSchema, cambiarEstadoSchema } from "@/lib/validations/mantenimiento"
 import {
@@ -98,33 +107,62 @@ export async function GET(
   }
 }
 
-// Función auxiliar para actualizar estado del equipo automáticamente
-async function actualizarEstadoEquipo(
-  tx: Prisma.TransactionClient,
-  equipoId: string,
-  nuevoEstadoMantenimiento: string
-) {
-  if (nuevoEstadoMantenimiento === "EN_PROCESO" || nuevoEstadoMantenimiento === "PROGRAMADO") {
-    await tx.equipo.update({
-      where: { id: equipoId },
-      data: { estado: "EN_MANTENIMIENTO" },
-    })
-  } else if (nuevoEstadoMantenimiento === "COMPLETADO" || nuevoEstadoMantenimiento === "CANCELADO") {
-    // Verificar si hay otros mantenimientos activos para este equipo
-    const otrosActivos = await tx.mantenimiento.count({
-      where: {
-        equipoId,
-        estado: { in: ["PROGRAMADO", "EN_PROCESO"] },
-      },
-    })
-    if (otrosActivos === 0) {
-      await tx.equipo.update({
-        where: { id: equipoId },
-        data: { estado: "ACTIVO" },
-      })
-    }
+/**
+ * Ejecuta una cancelación y devuelve la respuesta.
+ *
+ * Comparte camino entre el técnico y el administrador para que las dos —y la
+ * del cliente, que va por la ruta de solicitudes— dejen el sistema igual.
+ */
+async function responderCancelacion(datos: {
+  existente: { id: string; equipoId: string; solicitudId: string | null }
+  motivo: string
+  autorId: string
+  autorRol: AutorCancelacionConocido
+}) {
+  const motivo = datos.motivo.trim()
+
+  if (!motivo) {
+    return NextResponse.json(
+      { error: MOTIVO_CANCELACION_REQUERIDO, campos: ["motivoCancelacion"] },
+      { status: 400 }
+    )
   }
+
+  await prisma.$transaction(async (tx) => {
+    await cancelarMantenimiento(tx, {
+      mantenimientoId: datos.existente.id,
+      equipoId: datos.existente.equipoId,
+      solicitudId: datos.existente.solicitudId,
+      motivo,
+      autorId: datos.autorId,
+      autorRol: datos.autorRol,
+    })
+  })
+
+  const mantenimiento = await prisma.mantenimiento.findUniqueOrThrow({
+    where: { id: datos.existente.id },
+    include: {
+      equipo: {
+        select: {
+          id: true,
+          tipo: true,
+          marca: true,
+          serial: true,
+          empresa: { select: { id: true, nombre: true } },
+        },
+      },
+      tecnico: { select: { id: true, nombre: true, email: true } },
+    },
+  })
+
+  return NextResponse.json(mantenimiento)
 }
+
+// El estado del equipo se recalcula con `sincronizarEstadoEquipo`, en
+// `@/lib/estado-equipo.server`. Antes había aquí una función que decidía según
+// la transición que se estuviera haciendo; ahora la regla se expresa como
+// invariante —el equipo está en mantenimiento si y solo si tiene trabajo
+// abierto con técnico—, que es idempotente y no depende de por dónde se llegue.
 
 // PUT /api/mantenimientos/[id] - Actualizar mantenimiento
 export async function PUT(
@@ -163,6 +201,24 @@ export async function PUT(
       }
 
       const validatedData = cambiarEstadoSchema.parse(body)
+
+      // La cancelación va por su propio camino: además de mover el estado
+      // guarda motivo y autor, propaga a la solicitud de origen y deja su
+      // asiento. Hacerlo aquí y no en el `update` de abajo evita que las tres
+      // entradas de cancelación —cliente, técnico y administrador— acaben
+      // dejando el sistema en estados distintos.
+      if (
+        validatedData.estado === "CANCELADO" &&
+        existingMantenimiento.estado !== "CANCELADO"
+      ) {
+        return responderCancelacion({
+          existente: existingMantenimiento,
+          motivo: validatedData.motivoCancelacion ?? "",
+          autorId: session.user.id,
+          autorRol: "TECNICO",
+        })
+      }
+
       const updateData: Prisma.MantenimientoUncheckedUpdateInput = { estado: validatedData.estado }
 
       if (validatedData.observaciones !== undefined) {
@@ -204,9 +260,12 @@ export async function PUT(
             },
           })
 
-          // Auto-cambio estado del equipo
-          await actualizarEstadoEquipo(tx, existingMantenimiento.equipoId, validatedData.estado)
         }
+
+        // Fuera del `if`: el estado del equipo se recalcula siempre, porque
+        // depende de todo el trabajo abierto del equipo y no solo de si este
+        // mantenimiento cambió de estado.
+        await sincronizarEstadoEquipo(tx, existingMantenimiento.equipoId)
 
         return mantenimiento
       })
@@ -214,8 +273,34 @@ export async function PUT(
       return NextResponse.json(result)
     }
 
-    // ADMIN y CLIENTE: edición completa
+    // A partir de aquí, edición completa: solo el ADMIN.
+    //
+    // Esta rama atendía antes a ADMIN y CLIENTE por igual, sin comprobar ni la
+    // propiedad ni la empresa, así que un cliente podía cambiar el estado, las
+    // fechas, la descripción y el técnico de cualquier mantenimiento del
+    // sistema con solo conocer su identificador. La interfaz no se lo ofrecía,
+    // pero la API sí.
+    //
+    // El cliente conserva su vía acotada: cancelar su propia solicitud, que va
+    // por la ruta de solicitudes y sí comprueba la propiedad.
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
+    }
+
     const validatedData = updateMantenimientoSchema.parse(body)
+
+    // Igual que en la rama del técnico: cancelar es una operación propia.
+    if (
+      validatedData.estado === "CANCELADO" &&
+      existingMantenimiento.estado !== "CANCELADO"
+    ) {
+      return responderCancelacion({
+        existente: existingMantenimiento,
+        motivo: validatedData.motivoCancelacion ?? "",
+        autorId: session.user.id,
+        autorRol: "ADMIN",
+      })
+    }
 
     // El equipo se fija al crear el mantenimiento. Se comprueba antes de abrir
     // la transacción para que un rechazo no deje nada a medias.
@@ -253,13 +338,35 @@ export async function PUT(
       }
     }
 
-    // Reasignación de técnico: se persiste solo si realmente cambia
-    const tecnicoSolicitado = validatedData.tecnicoId?.trim() || null
-    const reasigna =
-      tecnicoSolicitado !== null && tecnicoSolicitado !== existingMantenimiento.tecnicoId
+    // Cambio de técnico. Hay tres intenciones distintas y el campo ausente no
+    // significa lo mismo que el campo vacío:
+    //
+    //   - ausente        -> la actualización no habla del técnico, no se toca.
+    //   - vacío (null,"")-> retirarlo: el mantenimiento queda sin técnico.
+    //   - con valor      -> asignar a ese técnico.
+    //
+    // La distinción importa porque al crear, el campo ausente sí significa algo
+    // —«decide tú», el reparto automático—, y con el técnico ya opcional las dos
+    // lecturas serían indistinguibles si se colapsaran aquí.
+    const hablaDelTecnico = validatedData.tecnicoId !== undefined
+    const tecnicoSolicitado = hablaDelTecnico
+      ? validatedData.tecnicoId?.trim() || null
+      : undefined
 
-    if (reasigna) {
-      updateData.tecnicoId = tecnicoSolicitado
+    const asignaTecnico =
+      hablaDelTecnico &&
+      tecnicoSolicitado != null &&
+      tecnicoSolicitado !== existingMantenimiento.tecnicoId
+
+    const retiraTecnico =
+      hablaDelTecnico &&
+      tecnicoSolicitado === null &&
+      existingMantenimiento.tecnicoId !== null
+
+    const cambiaTecnico = asignaTecnico || retiraTecnico
+
+    if (cambiaTecnico) {
+      updateData.tecnicoId = asignaTecnico ? tecnicoSolicitado : null
     }
 
     // Actualizar en transacción con historial
@@ -267,22 +374,33 @@ export async function PUT(
       let tecnicoAnterior: { nombre: string } | null = null
       let tecnicoNuevo: { nombre: string } | null = null
 
-      if (reasigna) {
-        await validarTecnicoAsignable(
-          tx,
-          tecnicoSolicitado,
-          existingMantenimiento.equipo.empresaId
-        )
+      if (cambiaTecnico) {
+        if (asignaTecnico) {
+          await validarTecnicoAsignable(
+            tx,
+            tecnicoSolicitado,
+            existingMantenimiento.equipo.empresaId
+          )
+        }
 
+        // Cada extremo se consulta solo si existe. Antes se preguntaba siempre
+        // por el técnico anterior, y con la columna ya opcional esa consulta
+        // recibía un identificador nulo: no compilaba, y forzada reventaba la
+        // transacción entera justo en el caso nuevo, el de asignar técnico a un
+        // mantenimiento que no lo tenía.
         ;[tecnicoAnterior, tecnicoNuevo] = await Promise.all([
-          tx.user.findUnique({
-            where: { id: existingMantenimiento.tecnicoId },
-            select: { nombre: true },
-          }),
-          tx.user.findUnique({
-            where: { id: tecnicoSolicitado },
-            select: { nombre: true },
-          }),
+          existingMantenimiento.tecnicoId
+            ? tx.user.findUnique({
+                where: { id: existingMantenimiento.tecnicoId },
+                select: { nombre: true },
+              })
+            : Promise.resolve(null),
+          asignaTecnico
+            ? tx.user.findUnique({
+                where: { id: tecnicoSolicitado },
+                select: { nombre: true },
+              })
+            : Promise.resolve(null),
         ])
       }
 
@@ -324,13 +442,12 @@ export async function PUT(
             observaciones: `Estado cambiado a: ${validatedData.estado}${validatedData.observaciones ? `. ${validatedData.observaciones}` : ""}`,
           },
         })
-
-        // Auto-cambio estado del equipo
-        await actualizarEstadoEquipo(tx, existingMantenimiento.equipoId, validatedData.estado)
       }
 
-      // Dejar constancia de quién sustituye a quién en la reasignación
-      if (reasigna) {
+      // Dejar constancia de quién sustituye a quién. Cubre los tres casos:
+      // sustitución, primera asignación —sin técnico anterior— y retirada —sin
+      // técnico nuevo—; los `?? "sin asignar"` los distinguen.
+      if (cambiaTecnico) {
         await tx.historial.create({
           data: {
             equipoId: existingMantenimiento.equipoId,
@@ -341,6 +458,13 @@ export async function PUT(
         })
       }
 
+      // El estado del equipo depende de si le queda trabajo abierto con
+      // técnico, así que hay que recalcularlo tanto cuando cambia el estado del
+      // mantenimiento como cuando cambia su técnico. Antes solo se hacía en el
+      // primer caso, y asignarle técnico a un mantenimiento huérfano dejaba el
+      // equipo activo indefinidamente.
+      await sincronizarEstadoEquipo(tx, existingMantenimiento.equipoId)
+
       return mantenimiento
     })
 
@@ -350,9 +474,14 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    if (error instanceof Error && error.name === "ZodError") {
+    if (esErrorDeValidacion(error)) {
+      // El mensaje concreto en lugar del genérico: con el motivo de cancelación
+      // obligatorio, "Datos inválidos" no le dice al usuario qué le falta.
       return NextResponse.json(
-        { error: "Datos inválidos", details: error },
+        {
+          error: mensajeDeValidacion(error),
+          campos: camposConProblema(error),
+        },
         { status: 400 }
       )
     }
@@ -387,6 +516,7 @@ export async function DELETE(
     // Verificar que el mantenimiento existe
     const mantenimiento = await prisma.mantenimiento.findUnique({
       where: { id },
+      select: { id: true, equipoId: true, solicitudId: true },
     })
 
     if (!mantenimiento) {
@@ -396,9 +526,26 @@ export async function DELETE(
       )
     }
 
-    // Eliminar (el historial se eliminará en cascada o se mantendrá según el schema)
-    await prisma.mantenimiento.delete({
-      where: { id },
+    await prisma.$transaction(async (tx) => {
+      // El historial conserva las entradas con `mantenimientoId` a nulo: el
+      // rastro de lo ocurrido sobre el equipo no se pierde al borrar el
+      // mantenimiento.
+      await tx.mantenimiento.delete({ where: { id } })
+
+      // La solicitud vuelve a pendiente para que quede claro que espera trabajo
+      // y para que el administrador pueda crearle uno nuevo. Sin esto quedaría
+      // aprobada y sin enlace: indistinguible de las anteriores al cambio, y
+      // sin salida.
+      if (mantenimiento.solicitudId) {
+        await tx.solicitudServicio.update({
+          where: { id: mantenimiento.solicitudId },
+          data: { estado: "PENDIENTE" },
+        })
+      }
+
+      // El equipo puede quedarse sin trabajo abierto: hay que recalcularlo o se
+      // queda atascado en mantenimiento indefinidamente.
+      await sincronizarEstadoEquipo(tx, mantenimiento.equipoId)
     })
 
     return NextResponse.json({ message: "Mantenimiento eliminado exitosamente" })

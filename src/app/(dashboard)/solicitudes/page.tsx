@@ -120,7 +120,13 @@ export default function SolicitudesPage() {
         throw new Error(result.error || "Error al crear solicitud")
       }
 
-      toast.success("Solicitud enviada exitosamente. Te notificaremos cuando sea revisada.")
+      if (result.avisoSinTecnico) {
+        toast.warning(result.avisoSinTecnico)
+      } else {
+        toast.success(
+          `Solicitud registrada. La atenderá ${result.mantenimiento?.tecnicoNombre ?? "un técnico"}.`
+        )
+      }
       setFormOpen(false)
       fetchSolicitudes()
     } catch (error) {
@@ -130,8 +136,11 @@ export default function SolicitudesPage() {
     }
   }
 
-  // pendientes count
-  const pendientes = solicitudes.filter(s => s.estado === "PENDIENTE").length
+  // Solicitudes que se quedaron sin mantenimiento: las anteriores al cambio y
+  // las que volvieron a quedar pendientes porque se eliminó el suyo. Son las
+  // que piden una acción del administrador; el aviso anterior contaba las
+  // "pendientes por revisar", y ya no hay nada que revisar.
+  const sinMantenimiento = solicitudes.filter((s) => !s.mantenimiento).length
 
   return (
     <>
@@ -157,6 +166,7 @@ export default function SolicitudesPage() {
                 <SelectItem value="EN_REVISION">En Revisión</SelectItem>
                 <SelectItem value="APROBADA">Aprobada</SelectItem>
                 <SelectItem value="RECHAZADA">Rechazada</SelectItem>
+                <SelectItem value="CANCELADA">Cancelada</SelectItem>
               </SelectContent>
             </Select>
 
@@ -185,11 +195,14 @@ export default function SolicitudesPage() {
 
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-7xl space-y-4">
-          {isAdmin && pendientes > 0 && (
+          {isAdmin && sinMantenimiento > 0 && (
             <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
               <Ticket className="h-4 w-4 text-yellow-600" />
               <span className="text-sm font-medium text-yellow-800">
-                Tienes {pendientes} {pendientes === 1 ? "solicitud pendiente" : "solicitudes pendientes"} por revisar
+                {sinMantenimiento === 1
+                  ? "Hay 1 solicitud sin mantenimiento registrado"
+                  : `Hay ${sinMantenimiento} solicitudes sin mantenimiento registrado`}
+                {" — créalo desde el menú de cada una."}
               </span>
             </div>
           )}

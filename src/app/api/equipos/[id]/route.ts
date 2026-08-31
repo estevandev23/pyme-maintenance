@@ -219,6 +219,9 @@ export async function DELETE(
           select: {
             mantenimientos: true,
             historial: true,
+            // Las solicitudes se borraban en cascada sin avisar, y ahora pueden
+            // ser el origen documentado de un mantenimiento.
+            solicitudes: true,
           },
         },
       },
@@ -232,13 +235,19 @@ export async function DELETE(
     }
 
     // Verificar si tiene datos relacionados
-    if (equipo._count.mantenimientos > 0 || equipo._count.historial > 0) {
+    if (
+      equipo._count.mantenimientos > 0 ||
+      equipo._count.historial > 0 ||
+      equipo._count.solicitudes > 0
+    ) {
       return NextResponse.json(
         {
-          error: "No se puede eliminar el equipo porque tiene mantenimientos o historial asociado",
+          error:
+            "No se puede eliminar el equipo porque tiene mantenimientos, historial o solicitudes asociadas",
           details: {
             mantenimientos: equipo._count.mantenimientos,
             historial: equipo._count.historial,
+            solicitudes: equipo._count.solicitudes,
           }
         },
         { status: 400 }

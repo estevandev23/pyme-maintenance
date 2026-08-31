@@ -180,7 +180,11 @@ export async function GET(request: NextRequest) {
         mantenimientosPendientes += 1
       }
 
-      if (mantenimiento.tipo === "CORRECTIVO") {
+      // Un mantenimiento cancelado no es evidencia de que el equipo haya
+      // fallado: no llegó a realizarse. Importa ahora porque con la creación
+      // automática el cliente puede abrir y cancelar, y sin esta condición cada
+      // ticket cancelado seguiría contando como una avería del equipo.
+      if (mantenimiento.tipo === "CORRECTIVO" && mantenimiento.estado !== "CANCELADO") {
         correctivosPorEquipo.set(
           mantenimiento.equipoId,
           (correctivosPorEquipo.get(mantenimiento.equipoId) ?? 0) + 1

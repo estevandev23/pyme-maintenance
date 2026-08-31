@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  camposConProblema,
+  esErrorDeValidacion,
+  mensajeDeValidacion,
+} from "@/lib/respuesta-validacion"
 import { Prisma, type EstadoSolicitud, type PrioridadSolicitud } from "@prisma/client"
 import { solicitudSchema } from "@/lib/validations/solicitud"
+import { crearMantenimientoDeSolicitud } from "@/lib/crear-mantenimiento.server"
+import { avisarSolicitudAtendida } from "@/lib/avisar-solicitud.server"
 
 // GET /api/solicitudes - Listar solicitudes
 export async function GET(request: NextRequest) {
@@ -63,6 +70,17 @@ export async function GET(request: NextRequest) {
           email: true,
         },
       },
+      // El mantenimiento enlazado: la interfaz lo necesita para saber si ofrece
+      // cancelar, si ofrece crear, y para mostrar el motivo con su autor.
+      mantenimiento: {
+        select: {
+          id: true,
+          estado: true,
+          fechaProgramada: true,
+          tecnico: { select: { id: true, nombre: true } },
+        },
+      },
+      canceladaPor: { select: { id: true, nombre: true } },
     }
 
     // Paginación
@@ -139,21 +157,59 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar que el equipo pertenece a la empresa del cliente
-    if (session.user.empresaId && equipo.empresaId !== session.user.empresaId) {
+    // Verificar que el equipo pertenece a la empresa del cliente.
+    //
+    // La comprobación anterior era `if (session.user.empresaId && ...)`: un
+    // cliente sin empresa asignada la esquivaba entera y podía solicitar sobre
+    // cualquier equipo del sistema. Mientras la solicitud era solo una fila de
+    // texto el daño se limitaba a que el administrador la descartara; ahora
+    // crea un mantenimiento real y dispara el reparto entre los técnicos de una
+    // empresa ajena.
+    if (!session.user.empresaId) {
+      return NextResponse.json(
+        {
+          error:
+            "Su usuario no tiene empresa asignada. Contacte al administrador para poder registrar solicitudes.",
+        },
+        { status: 403 }
+      )
+    }
+
+    if (equipo.empresaId !== session.user.empresaId) {
       return NextResponse.json(
         { error: "No tiene permisos sobre este equipo" },
         { status: 403 }
       )
     }
 
-    const solicitud = await prisma.solicitudServicio.create({
-      data: {
-        equipoId: validatedData.equipoId,
-        clienteId: session.user.id,
+    // La solicitud y su mantenimiento se crean juntos, en una transacción: no
+    // debe existir el estado intermedio en el que hay solicitud sin trabajo.
+    // Nace ya aprobada porque nadie tiene que aprobarla.
+    const { solicitud, mantenimiento } = await prisma.$transaction(async (tx) => {
+      const solicitudCreada = await tx.solicitudServicio.create({
+        data: {
+          equipoId: validatedData.equipoId,
+          clienteId: session.user.id,
+          descripcion: validatedData.descripcion,
+          prioridad: validatedData.prioridad,
+          estado: "APROBADA",
+        },
+        select: { id: true },
+      })
+
+      const mantenimientoCreado = await crearMantenimientoDeSolicitud(tx, {
+        solicitudId: solicitudCreada.id,
+        equipoId: equipo.id,
+        empresaId: equipo.empresaId,
         descripcion: validatedData.descripcion,
-        prioridad: validatedData.prioridad,
-      },
+        actorId: session.user.id,
+      })
+
+      return { solicitud: solicitudCreada, mantenimiento: mantenimientoCreado }
+    })
+
+    const solicitudCompleta = await prisma.solicitudServicio.findUniqueOrThrow({
+      where: { id: solicitud.id },
       include: {
         equipo: {
           select: {
@@ -180,11 +236,48 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(solicitud, { status: 201 })
+    // El aviso va DESPUÉS de confirmar la transacción y no puede tumbar nada:
+    // lo importante ya está guardado.
+    await avisarSolicitudAtendida({
+      clienteNombre: solicitudCompleta.cliente.nombre,
+      clienteEmail: solicitudCompleta.cliente.email,
+      descripcion: solicitudCompleta.descripcion,
+      equipo: {
+        tipo: solicitudCompleta.equipo.tipo,
+        marca: solicitudCompleta.equipo.marca,
+        modelo: solicitudCompleta.equipo.modelo,
+        serial: solicitudCompleta.equipo.serial,
+      },
+      fechaProgramada: mantenimiento.fechaProgramada,
+      tecnicoNombre: mantenimiento.tecnicoNombre,
+    })
+
+    return NextResponse.json(
+      {
+        ...solicitudCompleta,
+        mantenimiento: {
+          id: mantenimiento.id,
+          tecnicoId: mantenimiento.tecnicoId,
+          tecnicoNombre: mantenimiento.tecnicoNombre,
+          fechaProgramada: mantenimiento.fechaProgramada,
+        },
+        // El cliente tiene que enterarse en el momento de que su solicitud ya
+        // tiene trabajo asociado, y de si hay alguien detrás.
+        avisoSinTecnico: mantenimiento.tecnicoId
+          ? null
+          : "Su solicitud quedó registrada, pero todavía no hay un técnico disponible en su empresa. El administrador asignará uno.",
+      },
+      { status: 201 }
+    )
   } catch (error) {
-    if (error instanceof Error && error.name === "ZodError") {
+    if (esErrorDeValidacion(error)) {
+      // El mensaje concreto en lugar del genérico: con el motivo de cancelación
+      // obligatorio, "Datos inválidos" no le dice al usuario qué le falta.
       return NextResponse.json(
-        { error: "Datos inválidos", details: error },
+        {
+          error: mensajeDeValidacion(error),
+          campos: camposConProblema(error),
+        },
         { status: 400 }
       )
     }

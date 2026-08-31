@@ -1,7 +1,12 @@
 export interface Mantenimiento {
   id: string
   equipoId: string
-  tecnicoId: string
+  /**
+   * Nulo cuando el mantenimiento aún no tiene técnico asignado: la empresa del
+   * equipo no tenía ninguno activo al crearlo, o el administrador se lo retiró.
+   * No es un estado de error.
+   */
+  tecnicoId: string | null
   tipo: "PREVENTIVO" | "CORRECTIVO"
   estado: "PROGRAMADO" | "EN_PROCESO" | "COMPLETADO" | "CANCELADO"
   fechaProgramada: string | Date
@@ -24,5 +29,14 @@ export interface Mantenimiento {
     id: string
     nombre: string
     email: string
-  }
+  } | null
+  /**
+   * Solicitud que originó el mantenimiento. Nulo cuando lo creó el
+   * administrador desde el formulario, sin partir de ninguna.
+   */
+  solicitud?: {
+    id: string
+    prioridad: "BAJA" | "MEDIA" | "ALTA" | "URGENTE"
+    createdAt: string
+  } | null
 }

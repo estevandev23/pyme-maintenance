@@ -195,4 +195,45 @@ describe("GET /api/dashboard/stats", () => {
       expect(whereDelPeriodo().equipo).toEqual({ empresaId: "emp-1" })
     })
   })
+
+  describe("fallas recurrentes", () => {
+    /** Dos correctivos del mismo equipo, con los estados que se indiquen. */
+    function dosCorrectivos(primero: string, segundo: string) {
+      return [
+        mantenimiento("CORRECTIVO", primero, "2026-04-10", "2026-04-10"),
+        {
+          ...mantenimiento("CORRECTIVO", segundo, "2026-05-10", "2026-05-10"),
+          id: "m-segundo",
+        },
+      ]
+    }
+
+    it("dos correctivos ejecutados marcan el equipo como falla recurrente", async () => {
+      prepararDatos(dosCorrectivos("COMPLETADO", "COMPLETADO"))
+
+      const respuesta = await GET(peticion("?desde=2026-03-01&hasta=2026-05-31"))
+      const cuerpo = await respuesta.json()
+
+      expect(cuerpo.fallasRecurrentes).toHaveLength(1)
+    })
+
+    it("un correctivo cancelado no cuenta como falla del equipo", async () => {
+      // No llegó a realizarse: no es evidencia de que el equipo fallara.
+      prepararDatos(dosCorrectivos("COMPLETADO", "CANCELADO"))
+
+      const respuesta = await GET(peticion("?desde=2026-03-01&hasta=2026-05-31"))
+      const cuerpo = await respuesta.json()
+
+      expect(cuerpo.fallasRecurrentes).toHaveLength(0)
+    })
+
+    it("dos correctivos cancelados tampoco", async () => {
+      prepararDatos(dosCorrectivos("CANCELADO", "CANCELADO"))
+
+      const respuesta = await GET(peticion("?desde=2026-03-01&hasta=2026-05-31"))
+      const cuerpo = await respuesta.json()
+
+      expect(cuerpo.fallasRecurrentes).toHaveLength(0)
+    })
+  })
 })

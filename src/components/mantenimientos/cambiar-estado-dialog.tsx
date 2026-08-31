@@ -46,13 +46,24 @@ export function CambiarEstadoDialog({
 }: CambiarEstadoDialogProps) {
   const [estado, setEstado] = useState(estadoActual)
   const [observaciones, setObservaciones] = useState("")
+  const [motivoCancelacion, setMotivoCancelacion] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+
+  // Cancelar exige un motivo, y sin este campo el técnico no tendría dónde
+  // escribirlo: el servidor rechazaría cada intento y se quedaría sin poder
+  // cancelar nada.
+  const estaCancelando = estado === "CANCELADO"
 
   const handleSubmit = async () => {
     if (!mantenimientoId) return
 
     if (estado === estadoActual) {
       toast.error("Selecciona un estado diferente al actual")
+      return
+    }
+
+    if (estaCancelando && !motivoCancelacion.trim()) {
+      toast.error("Indique el motivo de la cancelación")
       return
     }
 
@@ -64,6 +75,7 @@ export function CambiarEstadoDialog({
         body: JSON.stringify({
           estado,
           observaciones: observaciones || null,
+          motivoCancelacion: estaCancelando ? motivoCancelacion.trim() : undefined,
         }),
       })
 
@@ -76,6 +88,7 @@ export function CambiarEstadoDialog({
       toast.success(`Estado cambiado a: ${estadoOptions.find(o => o.value === estado)?.label}`)
       onOpenChange(false)
       setObservaciones("")
+      setMotivoCancelacion("")
       onSuccess()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al cambiar estado")
@@ -127,6 +140,27 @@ export function CambiarEstadoDialog({
               className="resize-none"
             />
           </div>
+
+          {/* Cancelar exige motivo. Campo propio y no las observaciones,
+              porque aquellas se borran cada vez que alguien cambia el estado
+              con la caja vacía: el motivo se perdería. */}
+          {estaCancelando && (
+            <div className="space-y-2">
+              <Label>
+                Motivo de la cancelación <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                placeholder="¿Por qué no se va a hacer este mantenimiento?"
+                value={motivoCancelacion}
+                onChange={(e) => setMotivoCancelacion(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Quedará registrado y lo verá el cliente que lo solicitó.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -137,7 +171,10 @@ export function CambiarEstadoDialog({
           >
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={isLoading}>
+          <Button
+            onClick={handleSubmit}
+            disabled={isLoading || (estaCancelando && !motivoCancelacion.trim())}
+          >
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Guardar
           </Button>
