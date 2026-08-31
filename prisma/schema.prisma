@@ -40,6 +40,19 @@ enum EstadoSolicitud {
   EN_REVISION
   APROBADA
   RECHAZADA
+  // Cancelada por el cliente, el técnico o el administrador. Es distinto de
+  // RECHAZADA, que significa que el administrador denegó la solicitud: sin este
+  // valor, una cancelación del cliente se presentaba con el rótulo "Rechazada".
+  CANCELADA
+}
+
+/// Quién canceló un mantenimiento. Se guarda además del identificador del autor
+/// porque decide si la cancelación descuenta carga histórica al técnico: solo
+/// descuenta cuando no fue él quien canceló.
+enum AutorCancelacion {
+  CLIENTE
+  TECNICO
+  ADMIN
 }
 
 enum PrioridadSolicitud {
@@ -81,6 +94,8 @@ model User {
 
   empresa              Empresa?              @relation(fields: [empresaId], references: [id])
   mantenimientos       Mantenimiento[]       @relation("TecnicoMantenimientos")
+  cancelaciones        Mantenimiento[]       @relation("CancelacionesMantenimiento")
+  cancelacionesSolicitud SolicitudServicio[] @relation("CancelacionesSolicitud")
   historial            Historial[]
   solicitudes          SolicitudServicio[]   @relation("ClienteSolicitudes")
 
@@ -110,7 +125,13 @@ model Equipo {
 model Mantenimiento {
   id               String               @id @default(cuid())
   equipoId         String
-  tecnicoId        String
+  /// Opcional: un mantenimiento puede nacer sin técnico cuando la empresa del
+  /// equipo no tiene ninguno activo, y el administrador puede retirárselo.
+  tecnicoId        String?
+  /// Solicitud que originó este mantenimiento. Nulo cuando lo creó el
+  /// administrador desde el formulario. Único: una solicitud no puede acabar
+  /// con dos mantenimientos.
+  solicitudId      String?              @unique
   tipo             TipoMantenimiento
   estado           EstadoMantenimiento  @default(PROGRAMADO)
   fechaProgramada  DateTime
@@ -118,11 +139,23 @@ model Mantenimiento {
   descripcion      String               @db.Text
   observaciones    String?              @db.Text
   reporteUrl       String?
+  /// Motivo obligatorio al cancelar. Campo propio y no `observaciones`, porque
+  /// aquel se borra cada vez que alguien cambia el estado con la caja vacía.
+  motivoCancelacion String?             @db.Text
+  canceladoPorId   String?
+  canceladoPorRol  AutorCancelacion?
+  canceladoEn      DateTime?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
   equipo     Equipo      @relation(fields: [equipoId], references: [id], onDelete: Cascade)
-  tecnico    User        @relation("TecnicoMantenimientos", fields: [tecnicoId], references: [id])
+  // La acción de borrado se declara a mano: al hacer `tecnicoId` opcional,
+  // Prisma habría cambiado el valor por defecto de Restrict a SetNull y borrar
+  // un técnico habría dejado sus mantenimientos huérfanos en silencio.
+  tecnico    User?       @relation("TecnicoMantenimientos", fields: [tecnicoId], references: [id], onDelete: Restrict)
+  // Restrict: no se puede borrar una solicitud que tenga mantenimiento vivo.
+  solicitud  SolicitudServicio? @relation(fields: [solicitudId], references: [id], onDelete: Restrict)
+  canceladoPor User?     @relation("CancelacionesMantenimiento", fields: [canceladoPorId], references: [id], onDelete: SetNull)
   historial  Historial[]
   alertas    Alerta[]
 
@@ -169,8 +202,41 @@ model SolicitudServicio {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
+  /// Motivo, autor y fecha de la cancelación.
+  ///
+  /// Se guardan aquí y no solo en el mantenimiento porque la solicitud es el
+  /// registro del cliente y tiene que sobrevivirle: si se elimina el
+  /// mantenimiento, una solicitud cancelada perdería el motivo y el autor, y el
+  /// requisito de que el cliente vea quién canceló y por qué sería imposible de
+  /// cumplir. Se escriben en la misma transacción que los del mantenimiento.
+  motivoCancelacion String?           @db.Text
+  canceladoPorId    String?
+  canceladoPorRol   AutorCancelacion?
+  canceladoEn       DateTime?
+
   equipo      Equipo              @relation(fields: [equipoId], references: [id], onDelete: Cascade)
   cliente     User                @relation("ClienteSolicitudes", fields: [clienteId], references: [id])
+  canceladaPor User?              @relation("CancelacionesSolicitud", fields: [canceladoPorId], references: [id], onDelete: SetNull)
+  /// Lado inverso del enlace. Es a lo sumo uno: `Mantenimiento.solicitudId` es
+  /// único.
+  mantenimiento Mantenimiento?
 
   @@map("solicitudes_servicio")
+}
+
+/// Parámetros de operación que el administrador ajusta desde la aplicación.
+///
+/// Fila única con columnas tipadas, no clave/valor: los tipos salen gratis y la
+/// validación del rango vive junto al valor. Nadie crea esta fila —el
+/// repositorio no tiene semilla ni script de siembra de Prisma— así que la
+/// lectura tiene que resolver el valor por defecto por sí sola.
+model Configuracion {
+  id                 String   @id @default("unica")
+  /// Días de adelanto con que se programa un mantenimiento nacido de una
+  /// solicitud. Acotado por validación al rango que la ventana de avisos
+  /// soporta: por debajo nace vencido, por encima no aparece en ningún aviso.
+  diasProgramacion   Int      @default(3)
+  updatedAt          DateTime @updatedAt
+
+  @@map("configuracion")
 }
