@@ -64,10 +64,28 @@ export const updateMantenimientoSchema = mantenimientoSchema
   .partial()
   .refine(tieneMotivoSiCancela, PROBLEMA_MOTIVO)
 
+/**
+ * Lo que el técnico puede cambiar de un mantenimiento suyo.
+ *
+ * Es deliberadamente más estrecho que `updateMantenimientoSchema`, y la
+ * diferencia es de seguridad, no de comodidad: al enumerar solo lo permitido, un
+ * campo que se añada mañana al esquema del administrador queda fuera de la vía
+ * del técnico salvo que alguien lo abra a propósito. Con la forma contraria
+ * —aceptar todo y descartar después— entraría solo con que a alguien se le
+ * olvidara cerrarlo.
+ *
+ * En concreto **no** lleva `tecnicoId`: es lo único que impide que un técnico se
+ * reasigne trabajo saltándose la pantalla. Repartir es del administrador y del
+ * reparto automático.
+ *
+ * Tampoco lleva `reporteUrl`: el adjunto tiene su propia ruta bajo el
+ * mantenimiento, que comprueba por sí sola quién puede adjuntar.
+ */
 export const cambiarEstadoSchema = z
   .object({
     estado: z.enum(["PROGRAMADO", "EN_PROCESO", "COMPLETADO", "CANCELADO"]),
     observaciones: z.string().max(1000, "Máximo 1000 caracteres").optional().nullable(),
+    tipo: z.enum(["PREVENTIVO", "CORRECTIVO"]).optional(),
     motivoCancelacion: z
       .string()
       .max(MAX_MOTIVO, `Máximo ${MAX_MOTIVO} caracteres`)
@@ -75,6 +93,10 @@ export const cambiarEstadoSchema = z
       .nullable(),
   })
   .refine(tieneMotivoSiCancela, PROBLEMA_MOTIVO)
+
+/** El mantenimiento cerrado conserva su tipo: ver `esMantenimientoAbierto`. */
+export const TIPO_NO_RECLASIFICABLE =
+  "Un mantenimiento cerrado no se reclasifica: su tipo queda como está."
 
 export type MantenimientoInput = z.infer<typeof mantenimientoSchema>
 export type UpdateMantenimientoInput = z.infer<typeof updateMantenimientoSchema>

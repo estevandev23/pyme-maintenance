@@ -1,115 +1,4 @@
-# edicion-mantenimiento Specification
-
-## Purpose
-Define qué se puede cambiar de un mantenimiento ya creado y qué garantiza la
-respuesta de la API al actualizarlo: en concreto, que el equipo sobre el que se
-realiza un mantenimiento queda fijado al crearlo, y que un campo aceptado por la
-validación nunca se descarta en silencio.
-
-## Requirements
-
-### Requirement: El equipo de un mantenimiento queda fijado al crearlo
-
-El sistema SHALL rechazar la actualización de un mantenimiento cuando indique un
-equipo distinto al que tiene asignado, y MUST responder con un mensaje que
-explique que el equipo no puede cambiarse después de crear el mantenimiento.
-
-#### Scenario: Se intenta mover el mantenimiento a otro equipo
-
-- **WHEN** se actualiza un mantenimiento indicando un `equipoId` distinto al suyo
-- **THEN** la actualización es rechazada
-- **AND** el mantenimiento conserva su equipo
-- **AND** la respuesta explica que el equipo no puede cambiarse
-
-#### Scenario: Ningún otro campo se guarda en una actualización rechazada
-
-- **WHEN** una actualización indica a la vez un equipo distinto y una descripción
-  nueva
-- **THEN** la actualización es rechazada
-- **AND** el mantenimiento conserva también su descripción anterior
-
-### Requirement: Reenviar el equipo actual no es un cambio
-
-El sistema SHALL aceptar una actualización que incluya el `equipoId` que el
-mantenimiento ya tiene, y MUST tratarla como una actualización normal de los
-demás campos.
-
-#### Scenario: El formulario guarda reenviando el equipo actual
-
-- **WHEN** se actualiza un mantenimiento enviando su propio `equipoId` junto con
-  una descripción nueva
-- **THEN** la actualización se acepta
-- **AND** la descripción queda guardada
-
-#### Scenario: Una actualización que omite el equipo se acepta
-
-- **WHEN** se actualiza un mantenimiento sin incluir el campo `equipoId`
-- **THEN** la actualización se acepta
-- **AND** el mantenimiento conserva su equipo
-
-### Requirement: La actualización no descarta campos en silencio
-
-El sistema MUST NOT responder éxito a una actualización cuando alguno de los
-campos enviados y aceptados por la validación no llegó a aplicarse. Ante un campo
-que no puede aplicarse, SHALL rechazar la operación indicando el motivo.
-
-Esto SHALL incluir el vaciado deliberado de un campo que admite quedar vacío:
-retirar el técnico de un mantenimiento es una actualización como cualquier otra
-y MUST guardarse, no ignorarse.
-
-#### Scenario: Éxito significa que lo enviado quedó guardado
-
-- **WHEN** una actualización de mantenimiento responde éxito
-- **THEN** una consulta posterior devuelve los valores enviados en esa
-  actualización
-
-#### Scenario: Retirar el técnico no se ignora en silencio
-
-- **WHEN** el administrador actualiza un mantenimiento retirando el técnico
-  asignado
-- **THEN** la respuesta no indica éxito con el técnico anterior aún guardado
-- **AND** una consulta posterior devuelve el mantenimiento sin técnico
-
-### Requirement: Solo el administrador modifica un mantenimiento
-
-El sistema SHALL restringir al administrador la modificación completa de un
-mantenimiento. Un cliente MUST NOT poder modificar el estado, las fechas, la
-descripción ni el técnico de ningún mantenimiento, ni de su empresa ni de otra.
-
-Esto MUST NOT afectar a las dos vías acotadas que otros roles sí conservan: el
-técnico registra el avance de los mantenimientos asignados a él —estado,
-observaciones, reporte adjunto y, mientras el trabajo siga abierto, el tipo—, y
-el cliente cancela su propia solicitud dentro de las condiciones que
-`flujo-de-solicitudes` establece.
-
-La vía del técnico es acotada por lo que incluye, no por lo que la pantalla le
-ofrezca: cuanto queda fuera de esa lista —las fechas, la descripción del cliente,
-el equipo y el técnico asignado— MUST seguir siendo inalcanzable para él aunque
-lo intente saltándose la pantalla.
-
-#### Scenario: Un cliente intenta modificar un mantenimiento
-
-- **WHEN** un cliente intenta modificar un mantenimiento, sea de su empresa o de
-  otra
-- **THEN** el sistema le niega la operación
-
-#### Scenario: El técnico conserva su vía acotada
-
-- **WHEN** un técnico cambia el estado, las observaciones, el reporte adjunto o
-  el tipo de un mantenimiento abierto asignado a él
-- **THEN** la operación se aplica
-
-#### Scenario: La vía del técnico no llega más allá de lo enumerado
-
-- **WHEN** un técnico intenta cambiar la fecha programada, la descripción o el
-  equipo de un mantenimiento suyo
-- **THEN** el mantenimiento conserva esos valores
-
-#### Scenario: La cancelación del cliente sigue disponible
-
-- **WHEN** un cliente cancela su propia solicitud dentro de las condiciones
-  admitidas
-- **THEN** la cancelación se aplica
+## ADDED Requirements
 
 ### Requirement: El técnico decide con el equipo y la petición a la vista
 
@@ -269,47 +158,45 @@ formatos y el tamaño admitidos antes de que lo intente.
 - **THEN** la operación se acepta
 - **AND** el mantenimiento conserva el reporte que tuviera, si tenía alguno
 
-### Requirement: El estado del equipo refleja si hay trabajo con técnico
+## MODIFIED Requirements
 
-Un equipo SHALL figurar en mantenimiento cuando exista al menos un mantenimiento
-abierto sobre él **con técnico asignado**, y SHALL dejar de figurar así cuando no
-quede ninguno. Un mantenimiento abierto sin técnico asignado MUST NOT poner al
-equipo en mantenimiento ni impedir que salga de ese estado.
+### Requirement: Solo el administrador modifica un mantenimiento
 
-#### Scenario: Se asigna técnico a un mantenimiento que no lo tenía
+El sistema SHALL restringir al administrador la modificación completa de un
+mantenimiento. Un cliente MUST NOT poder modificar el estado, las fechas, la
+descripción ni el técnico de ningún mantenimiento, ni de su empresa ni de otra.
 
-- **WHEN** el administrador asigna un técnico a un mantenimiento abierto que no
-  lo tenía
-- **THEN** el equipo pasa a figurar en mantenimiento
-- **AND** ocurre aunque el estado del mantenimiento no haya cambiado
+Esto MUST NOT afectar a las dos vías acotadas que otros roles sí conservan: el
+técnico registra el avance de los mantenimientos asignados a él —estado,
+observaciones, reporte adjunto y, mientras el trabajo siga abierto, el tipo—, y
+el cliente cancela su propia solicitud dentro de las condiciones que
+`flujo-de-solicitudes` establece.
 
-#### Scenario: Se retira el técnico del único trabajo abierto
+La vía del técnico es acotada por lo que incluye, no por lo que la pantalla le
+ofrezca: cuanto queda fuera de esa lista —las fechas, la descripción del cliente,
+el equipo y el técnico asignado— MUST seguir siendo inalcanzable para él aunque
+lo intente saltándose la pantalla.
 
-- **WHEN** el administrador retira el técnico del único mantenimiento abierto de
-  un equipo que figuraba en mantenimiento
-- **THEN** el equipo deja de figurar en mantenimiento
+#### Scenario: Un cliente intenta modificar un mantenimiento
 
-#### Scenario: Un trabajo sin técnico no retiene al equipo
+- **WHEN** un cliente intenta modificar un mantenimiento, sea de su empresa o de
+  otra
+- **THEN** el sistema le niega la operación
 
-- **WHEN** se cierra el único mantenimiento con técnico de un equipo que además
-  tiene un mantenimiento abierto sin técnico
-- **THEN** el equipo deja de figurar en mantenimiento
+#### Scenario: El técnico conserva su vía acotada
 
-#### Scenario: Dos trabajos con técnico, se cierra uno
+- **WHEN** un técnico cambia el estado, las observaciones, el reporte adjunto o
+  el tipo de un mantenimiento abierto asignado a él
+- **THEN** la operación se aplica
 
-- **WHEN** se cierra uno de los dos mantenimientos abiertos con técnico de un
-  equipo
-- **THEN** el equipo sigue figurando en mantenimiento
+#### Scenario: La vía del técnico no llega más allá de lo enumerado
 
-#### Scenario: Salir de mantenimiento no resucita un equipo retirado
+- **WHEN** un técnico intenta cambiar la fecha programada, la descripción o el
+  equipo de un mantenimiento suyo
+- **THEN** el mantenimiento conserva esos valores
 
-- **WHEN** se cierra el último mantenimiento abierto de un equipo que estaba
-  inactivo o dado de baja
-- **THEN** el equipo conserva el estado que tenía
-- **AND** no pasa a figurar como activo
+#### Scenario: La cancelación del cliente sigue disponible
 
-#### Scenario: Eliminar un mantenimiento recalcula el estado del equipo
-
-- **WHEN** un administrador elimina el único mantenimiento abierto con técnico
-  de un equipo
-- **THEN** el equipo deja de figurar en mantenimiento
+- **WHEN** un cliente cancela su propia solicitud dentro de las condiciones
+  admitidas
+- **THEN** la cancelación se aplica

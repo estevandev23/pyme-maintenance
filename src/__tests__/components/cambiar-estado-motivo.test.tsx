@@ -22,11 +22,33 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = jest.fn()
 })
 
+/** Un mantenimiento asignado, con el contexto que la pantalla muestra. */
+export const MANTENIMIENTO = {
+  id: "mant-1",
+  equipoId: "eq-1",
+  tecnicoId: "tec-1",
+  tipo: "CORRECTIVO" as const,
+  estado: "PROGRAMADO" as const,
+  fechaProgramada: "2026-09-10",
+  fechaRealizada: null,
+  descripcion: "El equipo no enciende",
+  observaciones: null,
+  reporteUrl: null,
+  equipo: {
+    id: "eq-1",
+    tipo: "Laptop",
+    marca: "HP",
+    modelo: "Modelo-9373",
+    serial: "SN-900123",
+    empresa: { id: "em-1", nombre: "TechSolutions S.A.S" },
+  },
+  tecnico: { id: "tec-1", nombre: "Pedro Ramírez", email: "tecnico1@mantenpro.example" },
+}
+
 function abrir(estadoActual = "PROGRAMADO") {
   return render(
     <CambiarEstadoDialog
-      mantenimientoId="mant-1"
-      estadoActual={estadoActual}
+      mantenimiento={{ ...MANTENIMIENTO, estado: estadoActual as typeof MANTENIMIENTO.estado }}
       open
       onOpenChange={jest.fn()}
       onSuccess={jest.fn()}
@@ -34,9 +56,14 @@ function abrir(estadoActual = "PROGRAMADO") {
   )
 }
 
-/** Elige un estado en el selector del diálogo. */
+/**
+ * Elige un estado en el selector del diálogo.
+ *
+ * Se busca por su etiqueta y no por rol: la vista tiene ahora dos selectores
+ * —estado y tipo—, así que `getByRole("combobox")` sería ambiguo.
+ */
 async function elegirEstado(usuario: ReturnType<typeof userEvent.setup>, etiqueta: string) {
-  await usuario.click(screen.getByRole("combobox"))
+  await usuario.click(screen.getByLabelText("Nuevo Estado"))
   await usuario.click(await screen.findByRole("option", { name: etiqueta }))
 }
 

@@ -13,7 +13,11 @@ import { puedeVerMantenimiento } from "@/lib/alcance-mantenimiento"
 import { eliminarReporte } from "@/lib/reportes.server"
 import { cancelarMantenimiento } from "@/lib/cancelar.server"
 import type { AutorCancelacionConocido } from "@/lib/cancelacion-solicitud"
-import { MOTIVO_CANCELACION_REQUERIDO } from "@/lib/validations/mantenimiento"
+import {
+  MOTIVO_CANCELACION_REQUERIDO,
+  TIPO_NO_RECLASIFICABLE,
+} from "@/lib/validations/mantenimiento"
+import { esMantenimientoAbierto } from "@/lib/estados-mantenimiento"
 import { Prisma } from "@prisma/client"
 import { updateMantenimientoSchema, cambiarEstadoSchema } from "@/lib/validations/mantenimiento"
 import {
@@ -220,10 +224,32 @@ export async function PUT(
         })
       }
 
+      // Reclasificar el tipo. La condición se evalúa sobre el estado que el
+      // mantenimiento tenía ANTES de esta petición, no sobre el que va a
+      // quedar: el técnico sabe de qué tipo era el trabajo justo cuando lo
+      // cierra, y mirar el estado nuevo le obligaría a guardar dos veces —
+      // perdiendo la clasificación cada vez que se le olvidara la primera.
+      // Es el mismo criterio con el que se detecta la cancelación, unas líneas
+      // más arriba.
+      const reclasifica =
+        validatedData.tipo !== undefined &&
+        validatedData.tipo !== existingMantenimiento.tipo
+
+      if (reclasifica && !esMantenimientoAbierto(existingMantenimiento.estado)) {
+        return NextResponse.json(
+          { error: TIPO_NO_RECLASIFICABLE },
+          { status: 400 }
+        )
+      }
+
       const updateData: Prisma.MantenimientoUncheckedUpdateInput = { estado: validatedData.estado }
 
       if (validatedData.observaciones !== undefined) {
         updateData.observaciones = validatedData.observaciones
+      }
+
+      if (reclasifica) {
+        updateData.tipo = validatedData.tipo
       }
 
       if (validatedData.estado === "COMPLETADO") {
@@ -261,6 +287,22 @@ export async function PUT(
             },
           })
 
+        }
+
+        // Asiento propio para la reclasificación, y no una coletilla del
+        // anterior: el tipo alimenta el desglose de los informes y el recuento
+        // de fallas recurrentes, así que un cambio suyo tiene que poder
+        // rastrearse aunque el estado no se haya movido. Lleva el valor
+        // anterior porque sin él el asiento no explica nada.
+        if (reclasifica) {
+          await tx.historial.create({
+            data: {
+              equipoId: existingMantenimiento.equipoId,
+              mantenimientoId: id,
+              tecnicoId: session.user.id,
+              observaciones: `Tipo cambiado de ${existingMantenimiento.tipo} a ${validatedData.tipo}`,
+            },
+          })
         }
 
         // Fuera del `if`: el estado del equipo se recalcula siempre, porque

@@ -100,8 +100,11 @@ export function MantenimientosTable({
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [detailMantenimiento, setDetailMantenimiento] = useState<Mantenimiento | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [cambiarEstadoId, setCambiarEstadoId] = useState<string | null>(null)
-  const [cambiarEstadoActual, setCambiarEstadoActual] = useState<string>("")
+  // El mantenimiento entero, y no solo su identificador y su estado: la
+  // pantalla del técnico muestra el equipo, la empresa y lo que pidió el
+  // cliente junto al formulario.
+  const [cambiarEstadoMantenimiento, setCambiarEstadoMantenimiento] =
+    useState<Mantenimiento | null>(null)
   const [cambiarEstadoOpen, setCambiarEstadoOpen] = useState(false)
 
   const canEdit = userRole === "ADMIN"
@@ -125,8 +128,7 @@ export function MantenimientosTable({
   }
 
   const handleChangeEstado = (mantenimiento: Mantenimiento) => {
-    setCambiarEstadoId(mantenimiento.id)
-    setCambiarEstadoActual(mantenimiento.estado)
+    setCambiarEstadoMantenimiento(mantenimiento)
     setCambiarEstadoOpen(true)
   }
 
@@ -353,8 +355,7 @@ export function MantenimientosTable({
       />
 
       <CambiarEstadoDialog
-        mantenimientoId={cambiarEstadoId}
-        estadoActual={cambiarEstadoActual}
+        mantenimiento={cambiarEstadoMantenimiento}
         open={cambiarEstadoOpen}
         onOpenChange={setCambiarEstadoOpen}
         onSuccess={() => onRefresh?.()}
