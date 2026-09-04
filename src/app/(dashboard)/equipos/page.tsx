@@ -216,8 +216,11 @@ function EquiposPageContent() {
     }
   }
 
-  const canCreate = session?.user?.role === "ADMIN" || session?.user?.role === "CLIENTE"
-  const canEdit = session?.user?.role === "ADMIN" || session?.user?.role === "CLIENTE"
+  // El inventario es de la empresa de mantenimiento. Al cliente y al técnico no
+  // se les ofrecen estas entradas: ofrecer una acción que el servidor va a
+  // rechazar convierte una regla de permisos en un fallo aparente.
+  const canCreate = session?.user?.role === "ADMIN"
+  const canEdit = session?.user?.role === "ADMIN"
   const canDelete = session?.user?.role === "ADMIN"
   const isCliente = session?.user?.role === "CLIENTE"
 

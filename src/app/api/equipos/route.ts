@@ -82,17 +82,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
-    // Solo admin y cliente pueden crear equipos
-    if (session.user.role === "TECNICO") {
+    // El inventario es de la empresa de mantenimiento: solo el administrador
+    // da de alta equipos. Escrito en positivo a propósito. La forma anterior
+    // —rechazar al técnico y dejar pasar al resto— es la que dio permiso al
+    // cliente sin que nadie lo decidiera, cuando se añadió ese rol.
+    if (session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
     }
 
     const body = await request.json()
     const validatedData = equipoSchema.parse(body)
 
-    // Si es cliente, forzar que sea de su empresa
-    if (session.user.role === "CLIENTE" && session.user.empresaId) {
-      validatedData.empresaId = session.user.empresaId
+    // El estado de mantenimiento lo determina el trabajo abierto del equipo, no
+    // lo que se declare al registrarlo: uno recién creado no tiene ninguno. Se
+    // normaliza en lugar de rechazar, porque el valor correcto es deducible sin
+    // ambigüedad y un desplegable mal puesto no es un fallo que merezca parar.
+    if (validatedData.estado === "EN_MANTENIMIENTO") {
+      validatedData.estado = "ACTIVO"
     }
 
     // Verificar que el serial no exista

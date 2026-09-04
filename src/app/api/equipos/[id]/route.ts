@@ -102,7 +102,9 @@ export async function PUT(
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
-    if (session.user.role === "TECNICO") {
+    // Quien no da de alta un equipo tampoco cambia su identidad: modificar es
+    // del administrador. En positivo, por el mismo motivo que en el registro.
+    if (session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
     }
 
@@ -123,15 +125,6 @@ export async function PUT(
       )
     }
 
-    // Si es cliente, verificar que sea de su empresa
-    if (session.user.role === "CLIENTE" && session.user.empresaId) {
-      if (existingEquipo.empresaId !== session.user.empresaId) {
-        return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
-      }
-      // Cliente no puede cambiar de empresa ni el estado del equipo
-      delete validatedData.empresaId
-      delete validatedData.estado
-    }
 
     // Si se actualiza el serial, verificar que no exista
     if (validatedData.serial && validatedData.serial !== existingEquipo.serial) {

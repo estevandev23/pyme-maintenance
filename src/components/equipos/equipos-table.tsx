@@ -148,6 +148,10 @@ export function EquiposTable({ equipos, onEdit, onDelete, canEdit = true, canDel
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
+                    {/* Sin ninguna acción disponible, el menú se abriría vacío:
+                        un control que no lleva a ninguna parte se lee peor que
+                        la ausencia del control. */}
+                    {(canEdit || canDelete) && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -174,6 +178,7 @@ export function EquiposTable({ equipos, onEdit, onDelete, canEdit = true, canDel
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    )}
                   </TableCell>
                 </TableRow>
               )
