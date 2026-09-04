@@ -19,9 +19,7 @@
  */
 
 import type { Prisma } from "@prisma/client"
-
-/** Estados de un mantenimiento que cuentan como trabajo abierto. */
-const ESTADOS_ABIERTOS = ["PROGRAMADO", "EN_PROCESO"] as const
+import { ESTADOS_ABIERTOS } from "@/lib/estados-mantenimiento"
 
 /**
  * Recalcula el estado del equipo a partir de sus mantenimientos.

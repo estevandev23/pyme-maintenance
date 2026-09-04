@@ -19,7 +19,8 @@ export const mantenimientoSchema = z.object({
   fechaRealizada: z.string().optional().nullable(),
   descripcion: z.string().min(1, "La descripción es requerida").max(1000, "Máximo 1000 caracteres"),
   observaciones: z.string().max(1000, "Máximo 1000 caracteres").optional().nullable(),
-  reporteUrl: z.string().optional().nullable(),
+  // El reporte no viaja con el formulario: se adjunta sobre el mantenimiento ya
+  // creado, por su propia ruta, y es esa ruta la que escribe `reporteUrl`.
   /**
    * Motivo de la cancelación. Campo propio y no `observaciones`, porque aquel se
    * borra cada vez que alguien cambia el estado con la caja vacía.

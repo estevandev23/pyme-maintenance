@@ -7,6 +7,7 @@ import {
   laCancelacionDescuentaCarga,
   type AutorCancelacionConocido,
 } from "@/lib/cancelacion-solicitud"
+import { ESTADOS_ABIERTOS } from "@/lib/estados-mantenimiento"
 
 /**
  * Cliente Prisma o transacción. Las funciones de este módulo se usan tanto
@@ -14,8 +15,8 @@ import {
  */
 export type PrismaEjecutor = Pick<typeof prisma, "user" | "mantenimiento">
 
-/** Estados que cuentan como carga abierta de un técnico. */
-export const ESTADOS_ABIERTOS = ["PROGRAMADO", "EN_PROCESO"] as const
+/** Estados que cuentan como carga abierta de un técnico: los mismos que cuentan como trabajo abierto. */
+export { ESTADOS_ABIERTOS }
 
 /**
  * Decide si un mantenimiento cuenta en la carga histórica de su técnico.

@@ -542,6 +542,7 @@ function MantenimientosPageContent() {
         onOpenChange={handleFormOpenChange}
         onSubmit={editingMantenimiento ? handleUpdate : handleCreate}
         isLoading={isSubmitting}
+        onReporteCambiado={fetchMantenimientos}
         clienteEmpresaId={session?.user?.role === "CLIENTE" ? session?.user?.empresaId ?? undefined : undefined}
       />
     </>

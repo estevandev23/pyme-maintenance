@@ -73,6 +73,12 @@ interface MantenimientoFormProps {
   onSubmit: (data: MantenimientoInput) => Promise<void>
   isLoading: boolean
   clienteEmpresaId?: string
+  /**
+   * Avisa de que el reporte cambió: se adjuntó o se quitó. El archivo se
+   * escribe en el servidor en el acto, sin esperar a guardar el formulario, así
+   * que el listado tiene que enterarse aunque el diálogo se cierre sin guardar.
+   */
+  onReporteCambiado?: () => void
 }
 
 /** La API devuelve las fechas como cadena ISO; el formulario solo quiere el día. */
@@ -90,11 +96,14 @@ export function MantenimientoForm({
   onSubmit,
   isLoading,
   clienteEmpresaId,
+  onReporteCambiado,
 }: MantenimientoFormProps) {
   const [fechaProgramadaOpen, setFechaProgramadaOpen] = useState(false)
   const [fechaRealizadaOpen, setFechaRealizadaOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  /** Dirección de descarga del reporte adjunto, o null si no lo hay. */
+  const [reporteUrl, setReporteUrl] = useState<string | null>(null)
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>("")
 
   const form = useForm<MantenimientoInput>({
@@ -108,7 +117,6 @@ export function MantenimientoForm({
       fechaRealizada: null,
       descripcion: "",
       observaciones: null,
-      reporteUrl: null,
     },
   })
 
@@ -128,9 +136,10 @@ export function MantenimientoForm({
           : null,
         descripcion: mantenimiento.descripcion,
         observaciones: mantenimiento.observaciones,
-        reporteUrl: mantenimiento.reporteUrl,
       })
       setSelectedEmpresaId(mantenimiento.equipo.empresa.id)
+      setReporteUrl(mantenimiento.reporteUrl)
+      setSelectedFile(null)
     } else if (open) {
       form.reset({
         equipoId: "",
@@ -141,23 +150,36 @@ export function MantenimientoForm({
         fechaRealizada: null,
         descripcion: "",
         observaciones: null,
-        reporteUrl: null,
       })
       setSelectedEmpresaId(clienteEmpresaId || "")
+      setReporteUrl(null)
+      setSelectedFile(null)
     }
   }, [mantenimiento, form, open, clienteEmpresaId])
 
+  /**
+   * El reporte cuelga del mantenimiento, así que solo existe su ruta al editar.
+   * Al crear no hay a qué adjuntarlo todavía: se guarda primero y se adjunta
+   * después.
+   */
+  const rutaDelReporte = mantenimiento
+    ? `/api/mantenimientos/${mantenimiento.id}/reporte`
+    : null
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    // Vaciar el selector: si falla, volver a elegir el mismo archivo tiene que
+    // volver a disparar el cambio.
+    event.target.value = ""
+    if (!file || !rutaDelReporte) return
 
-    // Validar tipo
+    // Aviso temprano. La comprobación que decide es la del servidor, que mira
+    // el contenido del archivo y no el tipo que declara el navegador.
     if (file.type !== "application/pdf") {
       toast.error("Solo se permiten archivos PDF")
       return
     }
 
-    // Validar tamaño (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("El archivo excede el tamaño máximo de 5MB")
       return
@@ -165,36 +187,56 @@ export function MantenimientoForm({
 
     setSelectedFile(file)
 
-    // Subir archivo
+    // Se adjunta sobre el mantenimiento ya existente, en el acto: el archivo
+    // tiene dueño desde que se acepta.
     try {
       setUploading(true)
       const formData = new FormData()
       formData.append("file", file)
 
-      const response = await fetch("/api/upload", {
+      const response = await fetch(rutaDelReporte, {
         method: "POST",
         body: formData,
       })
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || "Error al subir archivo")
+        throw new Error(error.error || "Error al adjuntar el reporte")
       }
 
       const result = await response.json()
-      form.setValue("reporteUrl", result.url)
-      toast.success("Archivo subido exitosamente")
+      setReporteUrl(result.url)
+      toast.success("Reporte adjuntado")
+      onReporteCambiado?.()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error al subir archivo")
+      toast.error(error instanceof Error ? error.message : "Error al adjuntar el reporte")
       setSelectedFile(null)
     } finally {
       setUploading(false)
     }
   }
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null)
-    form.setValue("reporteUrl", null)
+  const handleRemoveFile = async () => {
+    if (!rutaDelReporte) return
+
+    try {
+      setUploading(true)
+      const response = await fetch(rutaDelReporte, { method: "DELETE" })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Error al quitar el reporte")
+      }
+
+      setSelectedFile(null)
+      setReporteUrl(null)
+      toast.success("Reporte quitado")
+      onReporteCambiado?.()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error al quitar el reporte")
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleSubmit = async (data: MantenimientoInput) => {
@@ -211,6 +253,7 @@ export function MantenimientoForm({
     })
     form.reset()
     setSelectedFile(null)
+    setReporteUrl(null)
     setSelectedEmpresaId("")
   }
 
@@ -546,51 +589,50 @@ export function MantenimientoForm({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="reporteUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Reporte PDF (Opcional)</FormLabel>
-                  <FormControl>
-                    <div className="space-y-2">
-                      {!field.value ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="file"
-                            accept=".pdf,application/pdf"
-                            onChange={handleFileChange}
-                            disabled={uploading}
-                            className="flex-1"
-                          />
-                          {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span className="flex-1 text-sm truncate">
-                            {selectedFile?.name || "Reporte adjunto"}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleRemoveFile}
-                            disabled={uploading}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        Formatos aceptados: PDF. Tamaño máximo: 5MB
-                      </p>
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* El reporte solo se adjunta sobre un mantenimiento que ya existe:
+                al crear no se ofrece, y se ofrece al editar. No es un campo del
+                formulario: el archivo se escribe en el servidor en el acto. */}
+            {mantenimiento && (
+              <FormItem>
+                <FormLabel>Reporte PDF (Opcional)</FormLabel>
+                <FormControl>
+                  <div className="space-y-2">
+                    {!reporteUrl ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={handleFileChange}
+                          disabled={uploading}
+                          className="flex-1"
+                        />
+                        {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="flex-1 text-sm truncate">
+                          {selectedFile?.name || "Reporte adjunto"}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleRemoveFile}
+                          disabled={uploading}
+                          aria-label="Quitar reporte"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Formatos aceptados: PDF. Tamaño máximo: 5MB
+                    </p>
+                  </div>
+                </FormControl>
+              </FormItem>
+            )}
 
             <DialogFooter>
               <Button

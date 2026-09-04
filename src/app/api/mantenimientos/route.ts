@@ -231,7 +231,6 @@ export async function POST(request: NextRequest) {
           fechaRealizada,
           descripcion: validatedData.descripcion,
           observaciones: validatedData.observaciones,
-          reporteUrl: validatedData.reporteUrl || null,
         },
         include: {
           equipo: {

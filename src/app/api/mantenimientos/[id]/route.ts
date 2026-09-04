@@ -9,6 +9,8 @@ import {
 } from "@/lib/respuesta-validacion"
 import { decidirCambioDeEquipo } from "@/lib/edicion-mantenimiento"
 import { sincronizarEstadoEquipo } from "@/lib/estado-equipo.server"
+import { puedeVerMantenimiento } from "@/lib/alcance-mantenimiento"
+import { eliminarReporte } from "@/lib/reportes.server"
 import { cancelarMantenimiento } from "@/lib/cancelar.server"
 import type { AutorCancelacionConocido } from "@/lib/cancelacion-solicitud"
 import { MOTIVO_CANCELACION_REQUERIDO } from "@/lib/validations/mantenimiento"
@@ -85,16 +87,15 @@ export async function GET(
       )
     }
 
-    // Si es técnico, verificar que sea asignado a él
-    if (session.user.role === "TECNICO" && mantenimiento.tecnicoId !== session.user.id) {
+    // La misma regla que aplica la descarga del reporte. Si cada una tuviera
+    // su copia, acabarían diciendo cosas distintas sin que se viera en pantalla.
+    if (
+      !puedeVerMantenimiento(session.user, {
+        tecnicoId: mantenimiento.tecnicoId,
+        empresaId: mantenimiento.equipo.empresa.id,
+      })
+    ) {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
-    }
-
-    // Si es cliente, verificar que sea de su empresa
-    if (session.user.role === "CLIENTE" && session.user.empresaId) {
-      if (mantenimiento.equipo.empresa.id !== session.user.empresaId) {
-        return NextResponse.json({ error: "Sin permisos" }, { status: 403 })
-      }
     }
 
     return NextResponse.json(mantenimiento)
@@ -319,7 +320,8 @@ export async function PUT(
     if (validatedData.tipo) updateData.tipo = validatedData.tipo
     if (validatedData.descripcion) updateData.descripcion = validatedData.descripcion
     if (validatedData.observaciones !== undefined) updateData.observaciones = validatedData.observaciones
-    if (validatedData.reporteUrl !== undefined) updateData.reporteUrl = validatedData.reporteUrl
+    // `reporteUrl` ya no se edita por aquí: lo escribe la ruta del reporte al
+    // adjuntar o quitar el archivo, que es la única que sabe si existe en disco.
 
     if (validatedData.fechaProgramada) {
       updateData.fechaProgramada = new Date(validatedData.fechaProgramada)
@@ -547,6 +549,15 @@ export async function DELETE(
       // queda atascado en mantenimiento indefinidamente.
       await sincronizarEstadoEquipo(tx, mantenimiento.equipoId)
     })
+
+    // El reporte no sobrevive a su mantenimiento. Va después de la transacción
+    // y no dentro: el disco no participa en ella, y un archivo huérfano es
+    // preferible a un registro que apunte a un archivo ya borrado.
+    try {
+      await eliminarReporte(id)
+    } catch (error) {
+      console.error(`No se pudo eliminar el reporte del mantenimiento ${id}:`, error)
+    }
 
     return NextResponse.json({ message: "Mantenimiento eliminado exitosamente" })
   } catch (error) {

@@ -146,6 +146,15 @@ Reglas que el esquema no deja ver por sí solo:
   ellos, así que quien vuelve a cero es el mínimo estricto y no hay sorteo.
   Descontar siempre convertiría cancelar el trabajo propio en la forma de
   garantizarse el siguiente.
+- **El reporte PDF no vive en `public/`.** `Mantenimiento.reporteUrl` guarda
+  la ruta de descarga (`/api/mantenimientos/<id>/reporte`), que exige sesión y
+  el mismo alcance que la lectura del mantenimiento. El archivo está en
+  `almacen/reportes/<id>.pdf` (o donde diga `REPORTES_DIR`), fuera de lo que
+  se sirve como estático, y solo `src/lib/reportes.server.ts` lo lee o
+  escribe. Se adjunta sobre un mantenimiento ya creado, nunca al crearlo. Ojo:
+  el `matcher` del middleware solo excluye `.png`, así que cualquier otro
+  archivo bajo `public/` exige sesión pero no alcance: lo abre cualquier
+  usuario de cualquier empresa.
 - Sigue sin haber marcas de tiempo de todos los eventos del ciclo de vida: solo
   la cancelación tiene `canceladoEn`. `updatedAt` se mueve con cualquier edición
   y no sirve como fecha de cierre, así que todavía no se puede medir el tiempo

@@ -30,9 +30,8 @@ next-env.d.ts
 # Scripts de desarrollo temporales
 !scripts/README.md
 
-# Uploads (archivos subidos por usuarios)
-public/uploads/**/*
-!public/uploads/**/.gitkeep
+# Reportes adjuntos a mantenimientos: directorio privado, fuera de public/
+/almacen/
 
 # OS
 .DS_Store
