@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { filtrosDeHistorial } from "@/lib/filtros-listado.server"
 import { Prisma } from "@prisma/client"
 
 export async function GET(request: NextRequest) {
@@ -13,53 +14,11 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const equipoId = searchParams.get("equipoId")
-    const tecnicoId = searchParams.get("tecnicoId")
-    const empresaId = searchParams.get("empresaId")
-    const fechaDesde = searchParams.get("fechaDesde")
-    const fechaHasta = searchParams.get("fechaHasta")
     const pageParam = searchParams.get("page")
     const limitParam = searchParams.get("limit")
 
-    const userRole = session.user.role
-    const userEmpresaId = session.user.empresaId
-    const userId = session.user.id
-
-    // Construir filtros base según rol
-    const whereClause: Prisma.HistorialWhereInput = {}
-
-    // Filtros por rol
-    if (userRole === "CLIENTE" && userEmpresaId) {
-      whereClause.equipo = { empresaId: userEmpresaId }
-    } else if (userRole === "TECNICO") {
-      whereClause.tecnicoId = userId
-    }
-
-    // Filtros adicionales
-    if (equipoId) {
-      whereClause.equipoId = equipoId
-    }
-
-    if (tecnicoId && userRole === "ADMIN") {
-      whereClause.tecnicoId = tecnicoId
-    }
-
-    if (empresaId && userRole === "ADMIN") {
-      whereClause.equipo = { empresaId }
-    }
-
-    // Filtros de fecha. Se arma aparte porque `whereClause.fecha` admite varias
-    // formas y no se le pueden ir añadiendo claves una a una.
-    if (fechaDesde || fechaHasta) {
-      const fecha: Prisma.DateTimeFilter = {}
-      if (fechaDesde) {
-        fecha.gte = new Date(fechaDesde)
-      }
-      if (fechaHasta) {
-        fecha.lte = new Date(fechaHasta)
-      }
-      whereClause.fecha = fecha
-    }
+    // Ver `filtros-listado.server`: la pantalla y la descarga preguntan lo mismo.
+    const whereClause = filtrosDeHistorial(searchParams, session.user)
 
     const include = {
       equipo: {

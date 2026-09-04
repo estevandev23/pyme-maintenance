@@ -32,6 +32,13 @@ esto no arreglaría nada: se exportarían las diez primeras filas *del periodo*.
 - Las exportaciones de mantenimientos aceptan un rango de fechas, con el mismo
   criterio de fecha que el panel de estadísticas ya usa: la fecha realizada cuando
   existe, y la programada cuando el trabajo aún no se ha hecho.
+- **BREAKING** Ese mismo periodo acota además el **listado** de mantenimientos,
+  que hoy muestra todo el histórico y pasa a mostrar el rango por defecto de seis
+  meses. Se decidió al implementar, al ver que la alternativa era peor: con el
+  periodo aplicado solo al archivo, la pantalla decía 74 y el archivo traía 52.
+  Aunque el archivo lo declarase, esa diferencia se lee como un truncado, que es
+  justo la sospecha que este cambio venía a eliminar. El periodo aplicado está
+  siempre a la vista sobre el listado.
 - El archivo exportado declara el periodo con el que se generó y cuántos elementos
   contiene, de modo que un archivo truncado por cualquier motivo futuro se note al
   abrirlo.

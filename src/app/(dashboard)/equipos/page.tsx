@@ -26,8 +26,7 @@ import { EquipoForm } from "@/components/equipos/equipo-form"
 import { toast } from "sonner"
 import type { EquipoInput } from "@/lib/validations/equipo"
 import { DataPagination } from "@/components/ui/data-pagination"
-import { exportEquiposToExcel } from "@/lib/excel-export"
-import { exportEquiposToPDF } from "@/lib/pdf-export"
+import { descargarExportacion } from "@/lib/descargar-exportacion"
 
 interface Equipo {
   id: string
@@ -61,6 +60,8 @@ function EquiposPageContent() {
   const [equipos, setEquipos] = useState<Equipo[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [loading, setLoading] = useState(true)
+  /** Formato que se está generando, o null. Deja el control inutilizable. */
+  const [exportando, setExportando] = useState<"excel" | "pdf" | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editingEquipo, setEditingEquipo] = useState<Equipo | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -224,39 +225,30 @@ function EquiposPageContent() {
     router.push("/equipos")
   }
 
-  const handleExportExcel = () => {
-    try {
-      const dataToExport = equipos.map((equipo) => ({
-        tipo: equipo.tipo,
-        marca: equipo.marca,
-        modelo: equipo.modelo,
-        serial: equipo.serial,
-        estado: equipo.estado,
-        ubicacion: equipo.ubicacion,
-        empresa: equipo.empresa.nombre,
-      }))
-      exportEquiposToExcel(dataToExport, "equipos")
-      toast.success("Equipos exportados a Excel")
-    } catch (error) {
-      toast.error("Error al exportar a Excel")
-    }
+  /** Los filtros que la pantalla tiene puestos, sin la paginación. */
+  const filtrosVisibles = () => {
+    const params = new URLSearchParams()
+    if (filterEmpresa !== "all") params.append("empresaId", filterEmpresa)
+    if (filterEstado !== "all") params.append("estado", filterEstado)
+    if (searchQuery) params.append("search", searchQuery)
+    return params
   }
 
-  const handleExportPDF = () => {
+  /** Ver la nota en la pantalla de mantenimientos: la genera el servidor. */
+  const handleExport = async (formato: "excel" | "pdf") => {
     try {
-      const dataToExport = equipos.map((equipo) => ({
-        tipo: equipo.tipo,
-        marca: equipo.marca,
-        modelo: equipo.modelo,
-        serial: equipo.serial,
-        estado: equipo.estado,
-        ubicacion: equipo.ubicacion,
-        empresa: equipo.empresa.nombre,
-      }))
-      exportEquiposToPDF(dataToExport)
-      toast.success("Equipos exportados a PDF")
+      setExportando(formato)
+      await descargarExportacion(
+        "/api/equipos/exportar",
+        filtrosVisibles(),
+        formato,
+        "equipos"
+      )
+      toast.success(`Equipos exportados a ${formato === "excel" ? "Excel" : "PDF"}`)
     } catch (error) {
-      toast.error("Error al exportar a PDF")
+      toast.error(error instanceof Error ? error.message : "Error al generar el archivo")
+    } finally {
+      setExportando(null)
     }
   }
 
@@ -289,11 +281,11 @@ function EquiposPageContent() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleExportExcel}>
+                  <DropdownMenuItem onClick={() => handleExport("excel")} disabled={exportando !== null}>
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
                     Exportar a Excel
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExportPDF}>
+                  <DropdownMenuItem onClick={() => handleExport("pdf")} disabled={exportando !== null}>
                     <FileDown className="mr-2 h-4 w-4" />
                     Exportar a PDF
                   </DropdownMenuItem>

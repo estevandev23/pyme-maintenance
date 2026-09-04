@@ -43,7 +43,7 @@ interface ExportHistorial {
 /**
  * Exporta un array de equipos a un archivo Excel
  */
-export function exportEquiposToExcel(equipos: ExportEquipo[], fileName: string = "equipos") {
+export function construirEquiposExcel(equipos: ExportEquipo[]) {
   // Transformar datos para la exportación
   const data = equipos.map((equipo) => ({
     Tipo: equipo.tipo,
@@ -82,17 +82,14 @@ export function exportEquiposToExcel(equipos: ExportEquipo[], fileName: string =
     CreatedDate: new Date(),
   }
 
-  // Generar archivo
-  const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
-  XLSX.writeFile(workbook, `${fileName}_${timestamp}.xlsx`)
+  return workbook
 }
 
 /**
  * Exporta un array de mantenimientos a un archivo Excel
  */
-export function exportMantenimientosToExcel(
-  mantenimientos: ExportMantenimiento[],
-  fileName: string = "mantenimientos"
+export function construirMantenimientosExcel(
+  mantenimientos: ExportMantenimiento[]
 ) {
   // Transformar datos para la exportación
   const data = mantenimientos.map((mant) => ({
@@ -136,17 +133,14 @@ export function exportMantenimientosToExcel(
     CreatedDate: new Date(),
   }
 
-  // Generar archivo
-  const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
-  XLSX.writeFile(workbook, `${fileName}_${timestamp}.xlsx`)
+  return workbook
 }
 
 /**
  * Exporta un array de historiales a un archivo Excel
  */
-export function exportHistorialToExcel(
-  historial: ExportHistorial[],
-  fileName: string = "historial"
+export function construirHistorialExcel(
+  historial: ExportHistorial[]
 ) {
   // Transformar datos para la exportación
   const data = historial.map((item) => ({
@@ -182,17 +176,14 @@ export function exportHistorialToExcel(
     CreatedDate: new Date(),
   }
 
-  // Generar archivo
-  const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
-  XLSX.writeFile(workbook, `${fileName}_${timestamp}.xlsx`)
+  return workbook
 }
 
 /**
  * Exporta estadísticas del dashboard a Excel
  */
-export function exportEstadisticasToExcel(
-  stats: EstadisticasInforme,
-  fileName: string = "estadisticas"
+export function construirEstadisticasExcel(
+  stats: EstadisticasInforme
 ) {
   const workbook = XLSX.utils.book_new()
   const generado = format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })
@@ -315,7 +306,46 @@ export function exportEstadisticasToExcel(
     CreatedDate: new Date(),
   }
 
-  // Generar archivo
+  return workbook
+}
+
+/**
+ * Entrega en el navegador.
+ *
+ * Es la única parte de este módulo que depende del navegador: todo lo anterior
+ * arma el libro y corre igual en el servidor. La separación existe para que la
+ * exportación pueda generarse donde están todos los datos, y no solo con la
+ * página que la pantalla tenía cargada.
+ */
+function descargarExcel(workbook: XLSX.WorkBook, fileName: string) {
   const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
   XLSX.writeFile(workbook, `${fileName}_${timestamp}.xlsx`)
+}
+
+export function exportEquiposToExcel(
+  equipos: Parameters<typeof construirEquiposExcel>[0],
+  fileName: string = "equipos"
+) {
+  descargarExcel(construirEquiposExcel(equipos), fileName)
+}
+
+export function exportMantenimientosToExcel(
+  mantenimientos: Parameters<typeof construirMantenimientosExcel>[0],
+  fileName: string = "mantenimientos"
+) {
+  descargarExcel(construirMantenimientosExcel(mantenimientos), fileName)
+}
+
+export function exportHistorialToExcel(
+  historial: Parameters<typeof construirHistorialExcel>[0],
+  fileName: string = "historial"
+) {
+  descargarExcel(construirHistorialExcel(historial), fileName)
+}
+
+export function exportEstadisticasToExcel(
+  stats: Parameters<typeof construirEstadisticasExcel>[0],
+  fileName: string = "estadisticas"
+) {
+  descargarExcel(construirEstadisticasExcel(stats), fileName)
 }

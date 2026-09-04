@@ -19,7 +19,7 @@ declare module "jspdf" {
 /**
  * Configuración común para todos los PDFs
  */
-function configurePDF(doc: jsPDF, title: string) {
+function configurePDF(doc: jsPDF, title: string, alcance: string[] = []): number {
   // Agregar título
   doc.setFontSize(18)
   doc.text(title, 14, 20)
@@ -32,9 +32,27 @@ function configurePDF(doc: jsPDF, title: string) {
     28
   )
 
+  // Lo que el archivo declara sobre sí mismo: cuántos elementos trae, con qué
+  // filtros y si está acotado por el rol de quien lo pidió. Sin esto, un archivo
+  // recortado no se distingue de uno completo.
+  let y = 32
+  if (alcance.length > 0) {
+    doc.setFontSize(8)
+    doc.setTextColor(90, 90, 90)
+    for (const linea of alcance) {
+      y += 4
+      doc.text(linea, 14, y)
+    }
+    doc.setTextColor(0, 0, 0)
+    y += 2
+  }
+
   // Línea separadora
   doc.setDrawColor(200, 200, 200)
-  doc.line(14, 32, doc.internal.pageSize.width - 14, 32)
+  doc.line(14, y, doc.internal.pageSize.width - 14, y)
+
+  // Dónde puede empezar la tabla.
+  return y + 6
 }
 
 /**
@@ -90,9 +108,9 @@ interface FilaHistorial {
 /**
  * Exporta equipos a PDF
  */
-export function exportEquiposToPDF(equipos: FilaEquipo[]) {
+export function construirEquiposPDF(equipos: FilaEquipo[], alcance: string[] = []) {
   const doc = new jsPDF()
-  configurePDF(doc, "Reporte de Equipos")
+  const inicioTabla = configurePDF(doc, "Reporte de Equipos", alcance)
 
   // Preparar datos para la tabla
   const tableData = equipos.map((equipo) => [
@@ -107,7 +125,7 @@ export function exportEquiposToPDF(equipos: FilaEquipo[]) {
 
   // Crear tabla
   autoTable(doc, {
-    startY: 38,
+    startY: inicioTabla,
     head: [["Tipo", "Marca", "Modelo", "Serial", "Estado", "Ubicación", "Empresa"]],
     body: tableData,
     theme: "grid",
@@ -129,22 +147,23 @@ export function exportEquiposToPDF(equipos: FilaEquipo[]) {
       5: { cellWidth: 30 },
       6: { cellWidth: 35 },
     },
-    margin: { top: 38 },
+    margin: { top: inicioTabla },
   })
 
   addFooter(doc)
 
-  // Descargar PDF
-  const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
-  doc.save(`equipos_${timestamp}.pdf`)
+  return doc
 }
 
 /**
  * Exporta mantenimientos a PDF
  */
-export function exportMantenimientosToPDF(mantenimientos: FilaMantenimiento[]) {
+export function construirMantenimientosPDF(
+  mantenimientos: FilaMantenimiento[],
+  alcance: string[] = []
+) {
   const doc = new jsPDF()
-  configurePDF(doc, "Reporte de Mantenimientos")
+  const inicioTabla = configurePDF(doc, "Reporte de Mantenimientos", alcance)
 
   // Preparar datos para la tabla
   const tableData = mantenimientos.map((mant) => [
@@ -159,7 +178,7 @@ export function exportMantenimientosToPDF(mantenimientos: FilaMantenimiento[]) {
 
   // Crear tabla
   autoTable(doc, {
-    startY: 38,
+    startY: inicioTabla,
     head: [
       [
         "Tipo",
@@ -191,22 +210,24 @@ export function exportMantenimientosToPDF(mantenimientos: FilaMantenimiento[]) {
       5: { cellWidth: 25 },
       6: { cellWidth: 25 },
     },
-    margin: { top: 38 },
+    margin: { top: inicioTabla },
   })
 
   addFooter(doc)
 
-  // Descargar PDF
-  const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
-  doc.save(`mantenimientos_${timestamp}.pdf`)
+  return doc
 }
 
 /**
  * Exporta historial a PDF
  */
-export function exportHistorialToPDF(historial: FilaHistorial[], titulo?: string) {
+export function construirHistorialPDF(
+  historial: FilaHistorial[],
+  titulo?: string,
+  alcance: string[] = []
+) {
   const doc = new jsPDF()
-  configurePDF(doc, titulo || "Historial de Intervenciones")
+  const inicioTabla = configurePDF(doc, titulo || "Historial de Intervenciones", alcance)
 
   // Preparar datos para la tabla
   const tableData = historial.map((item) => [
@@ -219,7 +240,7 @@ export function exportHistorialToPDF(historial: FilaHistorial[], titulo?: string
 
   // Crear tabla
   autoTable(doc, {
-    startY: 38,
+    startY: inicioTabla,
     head: [["Fecha", "Equipo", "Tipo", "Técnico", "Observaciones"]],
     body: tableData,
     theme: "grid",
@@ -239,24 +260,25 @@ export function exportHistorialToPDF(historial: FilaHistorial[], titulo?: string
       3: { cellWidth: 30 },
       4: { cellWidth: 60 },
     },
-    margin: { top: 38 },
+    margin: { top: inicioTabla },
   })
 
   addFooter(doc)
 
-  // Descargar PDF
-  const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
-  doc.save(`historial_${timestamp}.pdf`)
+  return doc
 }
 
 /**
  * Exporta estadísticas a PDF
  */
-export function exportEstadisticasToPDF(stats: EstadisticasInforme) {
+export function construirEstadisticasPDF(
+  stats: EstadisticasInforme,
+  alcance: string[] = []
+) {
   const doc = new jsPDF()
-  configurePDF(doc, "Estadísticas del Sistema")
+  const inicioTabla = configurePDF(doc, "Estadísticas del Sistema", alcance)
 
-  let currentY = 38
+  let currentY = inicioTabla
 
   // El periodo va antes que cualquier cifra: sin él las tablas no se pueden
   // interpretar fuera de la aplicación.
@@ -381,7 +403,38 @@ export function exportEstadisticasToPDF(stats: EstadisticasInforme) {
 
   addFooter(doc)
 
-  // Descargar PDF
+  return doc
+}
+
+/**
+ * Entrega en el navegador. Ver la nota equivalente en `excel-export`: el armado
+ * del documento es aritmética pura y corre igual en el servidor; solo esta capa
+ * necesita el navegador.
+ */
+function descargarPDF(doc: jsPDF, nombre: string) {
   const timestamp = format(new Date(), "yyyy-MM-dd_HHmm")
-  doc.save(`estadisticas_${timestamp}.pdf`)
+  doc.save(`${nombre}_${timestamp}.pdf`)
+}
+
+export function exportEquiposToPDF(equipos: Parameters<typeof construirEquiposPDF>[0]) {
+  descargarPDF(construirEquiposPDF(equipos), "equipos")
+}
+
+export function exportMantenimientosToPDF(
+  mantenimientos: Parameters<typeof construirMantenimientosPDF>[0]
+) {
+  descargarPDF(construirMantenimientosPDF(mantenimientos), "mantenimientos")
+}
+
+export function exportHistorialToPDF(
+  historial: Parameters<typeof construirHistorialPDF>[0],
+  titulo?: string
+) {
+  descargarPDF(construirHistorialPDF(historial, titulo), "historial")
+}
+
+export function exportEstadisticasToPDF(
+  stats: Parameters<typeof construirEstadisticasPDF>[0]
+) {
+  descargarPDF(construirEstadisticasPDF(stats), "estadisticas")
 }

@@ -43,6 +43,34 @@ firma creyendo que está completo.
 - **AND** se comprueba mirando la pantalla: el estado de espera es visible sin
   tener que adivinar si el clic tuvo efecto
 
+### Requirement: El periodo acota por igual la pantalla y el archivo
+
+Cuando una pantalla ofrezca acotar por periodo, el listado que muestra y el
+archivo que exporta SHALL contener los mismos elementos para el mismo periodo. El
+sistema MUST NOT presentar en pantalla un recuento y entregar en el archivo otro
+distinto: aunque el archivo declare su alcance, esa diferencia se lee como una
+pérdida de contenido.
+
+El periodo aplicado SHALL estar visible junto al listado, también cuando sea el
+que se aplica por defecto.
+
+#### Scenario: El recuento de la pantalla y el del archivo coinciden
+
+- **WHEN** el usuario exporta el listado de mantenimientos sin cambiar nada
+- **THEN** el archivo contiene tantos elementos como el listado indica
+
+#### Scenario: Cambiar el periodo mueve las dos cosas
+
+- **WHEN** el usuario cambia el periodo en la pantalla de mantenimientos
+- **THEN** el listado se recalcula sobre el periodo nuevo
+- **AND** una exportación posterior recoge ese mismo periodo
+
+#### Scenario: El periodo aplicado está a la vista
+
+- **WHEN** el usuario abre la pantalla de mantenimientos sin elegir periodo
+- **THEN** ve cuál es el periodo que se está aplicando
+- **AND** se comprueba mirando la pantalla
+
 ### Requirement: Las exportaciones de mantenimientos se acotan por periodo
 
 El sistema SHALL permitir acotar por un rango de fechas la exportación de

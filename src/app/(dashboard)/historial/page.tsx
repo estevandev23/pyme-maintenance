@@ -46,8 +46,7 @@ import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { exportHistorialToExcel } from "@/lib/excel-export"
-import { exportHistorialToPDF } from "@/lib/pdf-export"
+import { descargarExportacion } from "@/lib/descargar-exportacion"
 import { DataPagination } from "@/components/ui/data-pagination"
 
 interface HistorialItem {
@@ -114,6 +113,8 @@ export default function HistorialPage() {
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [loading, setLoading] = useState(true)
+  /** Formato que se está generando, o null. Deja el control inutilizable. */
+  const [exportando, setExportando] = useState<"excel" | "pdf" | null>(null)
 
   // Filtros
   const [filterEquipo, setFilterEquipo] = useState<string>("all")
@@ -232,35 +233,32 @@ export default function HistorialPage() {
     }
   }
 
-  const handleExportExcel = () => {
-    try {
-      const dataToExport = historial.map((item) => ({
-        fecha: format(new Date(item.fecha), "dd/MM/yyyy HH:mm", { locale: es }),
-        equipo: `${item.equipo.tipo} - ${item.equipo.marca} (${item.equipo.serial})`,
-        tipoMantenimiento: item.mantenimiento?.tipo || "-",
-        tecnico: item.tecnico?.nombre || "-",
-        observaciones: item.observaciones,
-      }))
-      exportHistorialToExcel(dataToExport, "historial_intervenciones")
-      toast.success("Historial exportado a Excel")
-    } catch (error) {
-      toast.error("Error al exportar a Excel")
-    }
+  /** Los filtros que la pantalla tiene puestos, sin la paginación. */
+  const filtrosVisibles = () => {
+    const params = new URLSearchParams()
+    if (filterEquipo !== "all") params.append("equipoId", filterEquipo)
+    if (filterTecnico !== "all") params.append("tecnicoId", filterTecnico)
+    if (filterEmpresa !== "all") params.append("empresaId", filterEmpresa)
+    if (filterFechaDesde) params.append("fechaDesde", filterFechaDesde)
+    if (filterFechaHasta) params.append("fechaHasta", filterFechaHasta)
+    return params
   }
 
-  const handleExportPDF = () => {
+  /** Ver la nota en la pantalla de mantenimientos: la genera el servidor. */
+  const handleExport = async (formato: "excel" | "pdf") => {
     try {
-      const dataToExport = historial.map((item) => ({
-        fecha: format(new Date(item.fecha), "dd/MM/yyyy HH:mm", { locale: es }),
-        equipo: `${item.equipo.tipo} - ${item.equipo.marca}`,
-        tipoMantenimiento: item.mantenimiento?.tipo || "-",
-        tecnico: item.tecnico?.nombre || "-",
-        observaciones: item.observaciones,
-      }))
-      exportHistorialToPDF(dataToExport, "Historial de Intervenciones")
-      toast.success("Historial exportado a PDF")
+      setExportando(formato)
+      await descargarExportacion(
+        "/api/historial/exportar",
+        filtrosVisibles(),
+        formato,
+        "historial"
+      )
+      toast.success(`Historial exportado a ${formato === "excel" ? "Excel" : "PDF"}`)
     } catch (error) {
-      toast.error("Error al exportar a PDF")
+      toast.error(error instanceof Error ? error.message : "Error al generar el archivo")
+    } finally {
+      setExportando(null)
     }
   }
 
@@ -398,11 +396,11 @@ export default function HistorialPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleExportExcel}>
+                  <DropdownMenuItem onClick={() => handleExport("excel")} disabled={exportando !== null}>
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
                     Exportar a Excel
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExportPDF}>
+                  <DropdownMenuItem onClick={() => handleExport("pdf")} disabled={exportando !== null}>
                     <FileDown className="mr-2 h-4 w-4" />
                     Exportar a PDF
                   </DropdownMenuItem>

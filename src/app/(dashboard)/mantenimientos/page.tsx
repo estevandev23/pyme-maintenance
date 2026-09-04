@@ -23,10 +23,10 @@ import { MantenimientosTable } from "@/components/mantenimientos/mantenimientos-
 import { MantenimientoForm } from "@/components/mantenimientos/mantenimiento-form"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useSession } from "next-auth/react"
 import type { MantenimientoInput } from "@/lib/validations/mantenimiento"
-import { exportMantenimientosToExcel } from "@/lib/excel-export"
-import { exportMantenimientosToPDF } from "@/lib/pdf-export"
+import { descargarExportacion } from "@/lib/descargar-exportacion"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { Mantenimiento } from "@/types/mantenimiento"
@@ -71,6 +71,10 @@ function MantenimientosPageContent() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingMantenimiento, setEditingMantenimiento] = useState<Mantenimiento | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  /** Formato que se está generando, o null. Deja el control inutilizable. */
+  const [exportando, setExportando] = useState<"excel" | "pdf" | null>(null)
+  const [rangoDesde, setRangoDesde] = useState<string>("")
+  const [rangoHasta, setRangoHasta] = useState<string>("")
 
   // Filtro por ID desde URL (viene de alertas y de la pantalla de solicitudes)
   const filterId = searchParams.get("id")
@@ -114,14 +118,14 @@ function MantenimientosPageContent() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [filterEstado, filterTipo, filterTecnico, filterEmpresa, searchQuery, filterId])
+  }, [filterEstado, filterTipo, filterTecnico, filterEmpresa, searchQuery, filterId, rangoDesde, rangoHasta])
 
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchMantenimientos()
     }, 500)
     return () => clearTimeout(timer)
-  }, [filterEstado, filterTipo, filterTecnico, filterEmpresa, searchQuery, filterId, currentPage])
+  }, [filterEstado, filterTipo, filterTecnico, filterEmpresa, searchQuery, filterId, rangoDesde, rangoHasta, currentPage])
 
   const fetchEmpresas = async () => {
     try {
@@ -158,16 +162,24 @@ function MantenimientosPageContent() {
     }
   }
 
+  /** Los filtros que la pantalla tiene puestos, sin la paginación. */
+  const filtrosVisibles = () => {
+    const params = new URLSearchParams()
+    if (filterId) params.append("id", filterId)
+    if (filterEstado !== "all") params.append("estado", filterEstado)
+    if (filterTipo !== "all") params.append("tipo", filterTipo)
+    if (filterTecnico !== "all") params.append("tecnicoId", filterTecnico)
+    if (filterEmpresa !== "all") params.append("empresaId", filterEmpresa)
+    if (searchQuery) params.append("search", searchQuery)
+    if (rangoDesde) params.append("desde", rangoDesde)
+    if (rangoHasta) params.append("hasta", rangoHasta)
+    return params
+  }
+
   const fetchMantenimientos = async () => {
     try {
       setLoading(true)
-      const params = new URLSearchParams()
-      if (filterId) params.append("id", filterId)
-      if (filterEstado !== "all") params.append("estado", filterEstado)
-      if (filterTipo !== "all") params.append("tipo", filterTipo)
-      if (filterTecnico !== "all") params.append("tecnicoId", filterTecnico)
-      if (filterEmpresa !== "all") params.append("empresaId", filterEmpresa)
-      if (searchQuery) params.append("search", searchQuery)
+      const params = filtrosVisibles()
       params.append("page", currentPage.toString())
       params.append("limit", itemsPerPage.toString())
 
@@ -298,45 +310,27 @@ function MantenimientosPageContent() {
   // Contar alertas activas
   const alertasCount = mantenimientos.filter(isInAlert).length
 
-  const handleExportExcel = () => {
+  /**
+   * La descarga la genera el servidor con todos los datos que cumplen los
+   * filtros. Antes se armaba aquí con `mantenimientos`, que es solo la página
+   * cargada: el archivo salía con diez filas de las que hubiera, sin decirlo.
+   */
+  const handleExport = async (formato: "excel" | "pdf") => {
     try {
-      const dataToExport = mantenimientos.map((mant) => ({
-        tipo: mant.tipo,
-        estado: mant.estado,
-        equipo: `${mant.equipo.tipo} - ${mant.equipo.marca} ${mant.equipo.modelo || ""} (${mant.equipo.serial})`,
-        empresa: mant.equipo.empresa.nombre,
-        tecnico: mant.tecnico?.nombre ?? null,
-        fechaProgramada: format(new Date(mant.fechaProgramada), "dd/MM/yyyy", { locale: es }),
-        fechaRealizada: mant.fechaRealizada
-          ? format(new Date(mant.fechaRealizada), "dd/MM/yyyy", { locale: es })
-          : null,
-        descripcion: mant.descripcion,
-        observaciones: mant.observaciones,
-      }))
-      exportMantenimientosToExcel(dataToExport, "mantenimientos")
-      toast.success("Mantenimientos exportados a Excel")
+      setExportando(formato)
+      await descargarExportacion(
+        "/api/mantenimientos/exportar",
+        filtrosVisibles(),
+        formato,
+        "mantenimientos"
+      )
+      toast.success(`Mantenimientos exportados a ${formato === "excel" ? "Excel" : "PDF"}`)
     } catch (error) {
-      toast.error("Error al exportar a Excel")
-    }
-  }
-
-  const handleExportPDF = () => {
-    try {
-      const dataToExport = mantenimientos.map((mant) => ({
-        tipo: mant.tipo,
-        estado: mant.estado,
-        equipo: `${mant.equipo.tipo} - ${mant.equipo.marca}`,
-        empresa: mant.equipo.empresa.nombre,
-        tecnico: mant.tecnico?.nombre ?? null,
-        fechaProgramada: format(new Date(mant.fechaProgramada), "dd/MM/yyyy", { locale: es }),
-        fechaRealizada: mant.fechaRealizada
-          ? format(new Date(mant.fechaRealizada), "dd/MM/yyyy", { locale: es })
-          : null,
-      }))
-      exportMantenimientosToPDF(dataToExport)
-      toast.success("Mantenimientos exportados a PDF")
-    } catch (error) {
-      toast.error("Error al exportar a PDF")
+      toast.error(
+        error instanceof Error ? error.message : "Error al generar el archivo"
+      )
+    } finally {
+      setExportando(null)
     }
   }
 
@@ -379,15 +373,15 @@ function MantenimientosPageContent() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline">
                     <FileDown className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Exportar</span>
+                    <span className="hidden sm:inline">{exportando ? "Generando..." : "Exportar"}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleExportExcel}>
+                  <DropdownMenuItem onClick={() => handleExport("excel")} disabled={exportando !== null}>
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
                     Exportar a Excel
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExportPDF}>
+                  <DropdownMenuItem onClick={() => handleExport("pdf")} disabled={exportando !== null}>
                     <FileDown className="mr-2 h-4 w-4" />
                     Exportar a PDF
                   </DropdownMenuItem>
@@ -403,6 +397,37 @@ function MantenimientosPageContent() {
           </div>
 
           {/* Fila 2: Filtros */}
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            <div className="space-y-1">
+              <Label htmlFor="rango-desde" className="text-xs text-muted-foreground">
+                Periodo desde
+              </Label>
+              <Input
+                id="rango-desde"
+                type="date"
+                value={rangoDesde}
+                onChange={(e) => setRangoDesde(e.target.value)}
+                className="w-[160px]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="rango-hasta" className="text-xs text-muted-foreground">
+                Periodo hasta
+              </Label>
+              <Input
+                id="rango-hasta"
+                type="date"
+                value={rangoHasta}
+                onChange={(e) => setRangoHasta(e.target.value)}
+                className="w-[160px]"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground pb-2">
+              El periodo acota lo que se ve y lo que se exporta, por fecha
+              realizada o, si aún no se ha hecho, por la programada.
+            </p>
+          </div>
+
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
               <Select value={filterEstado} onValueChange={setFilterEstado}>

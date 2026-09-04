@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { filtrosDeEquipos } from "@/lib/filtros-listado.server"
 import { Prisma, type EstadoEquipo } from "@prisma/client"
 import { equipoSchema } from "@/lib/validations/equipo"
 
@@ -15,51 +16,11 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const id = searchParams.get("id")
-    const empresaId = searchParams.get("empresaId")
-    const estado = searchParams.get("estado")
-    const search = searchParams.get("search")
     const pageParam = searchParams.get("page")
     const limitParam = searchParams.get("limit")
 
-    const andFilters: Prisma.EquipoWhereInput[] = []
-
-    // Filtro por ID específico (desde alertas)
-    if (id) {
-      andFilters.push({ id })
-    }
-
-    // Filtrar por empresa si se proporciona
-    if (empresaId) {
-      andFilters.push({ empresaId })
-    }
-
-    // Filtrar por estado si se proporciona
-    if (estado) {
-      andFilters.push({ estado: estado as EstadoEquipo })
-    }
-
-    // Búsqueda multi-término por tipo, marca, serial o modelo
-    if (search) {
-      const searchTerms = search.split(/\s+/).filter(term => term.length > 0)
-      searchTerms.forEach(term => {
-        andFilters.push({
-          OR: [
-            { tipo: { contains: term, mode: 'insensitive' } },
-            { marca: { contains: term, mode: 'insensitive' } },
-            { serial: { contains: term, mode: 'insensitive' } },
-            { modelo: { contains: term, mode: 'insensitive' } },
-          ]
-        })
-      })
-    }
-
-    // Si es cliente, solo ver equipos de su empresa
-    if (session.user.role === "CLIENTE" && session.user.empresaId) {
-      andFilters.push({ empresaId: session.user.empresaId })
-    }
-
-    const where = andFilters.length > 0 ? { AND: andFilters } : {}
+    // Ver `filtros-listado.server`: la pantalla y la descarga preguntan lo mismo.
+    const where = filtrosDeEquipos(searchParams, session.user)
 
     const include = {
       empresa: {

@@ -7,7 +7,6 @@ import {
   esErrorDeValidacion,
   mensajeDeValidacion,
 } from "@/lib/respuesta-validacion"
-import { Prisma, type EstadoMantenimiento, type TipoMantenimiento } from "@prisma/client"
 import { mantenimientoSchema } from "@/lib/validations/mantenimiento"
 import {
   AsignacionError,
@@ -16,6 +15,11 @@ import {
 } from "@/lib/asignacion-tecnicos.server"
 import { sincronizarEstadoEquipo } from "@/lib/estado-equipo.server"
 import { SIN_ASIGNAR } from "@/lib/tecnico-asignado"
+import {
+  filtroPorFechaReferencia,
+  filtrosDeMantenimientos,
+} from "@/lib/filtros-listado.server"
+import { parsearRango } from "@/lib/estadisticas"
 
 // GET /api/mantenimientos - Listar todos los mantenimientos
 export async function GET(request: NextRequest) {
@@ -27,67 +31,29 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const id = searchParams.get("id")
-    const estado = searchParams.get("estado")
-    const tipo = searchParams.get("tipo")
-    const tecnicoId = searchParams.get("tecnicoId")
-    const equipoId = searchParams.get("equipoId")
-    const empresaId = searchParams.get("empresaId")
-    const search = searchParams.get("search")
     const pageParam = searchParams.get("page")
     const limitParam = searchParams.get("limit")
 
-    const andFilters: Prisma.MantenimientoWhereInput[] = []
-
-    // Filtro por ID específico (desde alertas)
-    if (id) andFilters.push({ id })
-    if (estado) andFilters.push({ estado: estado as EstadoMantenimiento })
-    if (tipo) andFilters.push({ tipo: tipo as TipoMantenimiento })
-    // `sin-asignar` es un valor propio, no un identificador: es la única forma
-    // de pedir los mantenimientos que esperan técnico, porque el parámetro
-    // siempre llega como cadena y `?tecnicoId=null` filtraría por el texto
-    // literal «null» y devolvería cero filas sin error.
-    if (tecnicoId === SIN_ASIGNAR) {
-      andFilters.push({ tecnicoId: null })
-    } else if (tecnicoId) {
-      andFilters.push({ tecnicoId })
-    }
-    if (equipoId) andFilters.push({ equipoId })
-
-    // Búsqueda multi-término
-    if (search) {
-      const searchTerms = search.split(/\s+/).filter(term => term.length > 0)
-      searchTerms.forEach(term => {
-        andFilters.push({
-          OR: [
-            {
-              equipo: {
-                OR: [
-                  { tipo: { contains: term, mode: 'insensitive' } },
-                  { marca: { contains: term, mode: 'insensitive' } },
-                  { serial: { contains: term, mode: 'insensitive' } },
-                  { modelo: { contains: term, mode: 'insensitive' } },
-                ]
-              }
-            },
-            { descripcion: { contains: term, mode: 'insensitive' } }
-          ]
-        })
-      })
+    // Los filtros y el alcance por rol se arman en un solo sitio, compartido con
+    // la ruta de descarga: si cada una tuviera los suyos, con el tiempo dejarían
+    // de coincidir y la diferencia no se vería en pantalla.
+    // El periodo acota también el listado, y con el mismo criterio que la
+    // descarga: si solo acotara el archivo, la pantalla diría un número y el
+    // archivo otro, que es la sospecha que este cambio venía a quitar.
+    const resultadoRango = parsearRango(
+      searchParams.get("desde"),
+      searchParams.get("hasta")
+    )
+    if (!resultadoRango.ok) {
+      return NextResponse.json({ error: resultadoRango.error }, { status: 400 })
     }
 
-    // Role filters y filtros por empresa
-    if (session.user.role === "TECNICO") {
-      andFilters.push({ tecnicoId: session.user.id })
+    const where = {
+      AND: [
+        filtrosDeMantenimientos(searchParams, session.user),
+        filtroPorFechaReferencia(resultadoRango.rango),
+      ],
     }
-
-    if (session.user.role === "CLIENTE" && session.user.empresaId) {
-      andFilters.push({ equipo: { empresaId: session.user.empresaId } })
-    } else if (empresaId && empresaId !== "all" && session.user.role === "ADMIN") {
-      andFilters.push({ equipo: { empresaId: empresaId } })
-    }
-
-    const where = andFilters.length > 0 ? { AND: andFilters } : {}
 
     const include = {
       equipo: {
